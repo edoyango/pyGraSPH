@@ -1,5 +1,6 @@
 # pyGraSPH
-A Python version of GraSPH. Early stages of development
+
+A Python, and super basic, version of GraSPH. Early stages of development. Only in 2D.
 
 ## Setup
 
