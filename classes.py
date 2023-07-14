@@ -42,6 +42,23 @@ class particles:
 
         self.sigma[i, :] = sigma0[:] + dsig[:]
 
+        Ide = np.ascontiguousarray([1, 1, 1, 0])
+        D2 = np.ascontiguousarray([1, 1, 1, 2])
+
+        I1 = self.sigma[i, 0] + self.sigma[i, 1] + self.sigma[i, 2]
+        s = self.sigma[i, :] - I1/3.*Ide[:]
+        J2 = 0.5*np.dot(s[:], D2[:]*s[:])
+
+        f = self.customvals['alpha_phi']*I1 + np.sqrt(J2) - self.customvals['k_c']
+
+        if f > 0.:
+            dfdsig = self.customvals['alpha_phi']*Ide[:] + s[:]/(2.*np.sqrt(J2))
+            dgdsig = self.customvals['alpha_psi']*Ide[:] + s[:]/(2.*np.sqrt(J2))
+
+            dlambda = f/(np.dot(dfdsig[:], D2[:]*np.matmul(self.customvals['DE'][:, :], dgdsig[:])))
+
+            self.sigma[i, :] -= np.matmul(self.customvals['DE'][:, :], dlambda*dgdsig[:])
+
         # for i in range(self.ntotal+self.nvirt):
         #     p = self.c*self.c*(self.rho[i] - self.rho_ini)
         #     self.sigma[i, 0:3] = -p/3.
