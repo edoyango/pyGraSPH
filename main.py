@@ -38,7 +38,24 @@ if __name__ == '__main__':
     op = np
     nlayer = 4
     maxn = 15000
-    pts = my_particles(maxn=maxn, dx=0.5, rho_ini=1600., maxinter=25*maxn, c=npy.sqrt(10e6/1600))
+
+    E = 10e6
+    v = 0.3
+    Kb = E/(3.*(1.-2.*v))
+    Gs = E/(2.*(1.+v))
+    rho_ini = 1600.
+    DEcoeff = E/((1.+v)*(1.-2.*v))
+    DE = DEcoeff*npy.ascontiguousarray([[1.-v,    v,    v, 0.     ], 
+                                        [   v, 1.-v,    v, 0.     ],
+                                        [   v,    v, 1.-v, 0.     ],
+                                        [  0.,   0.,   0., 1.-2.*v]])
+    
+    pts = my_particles(maxn=maxn, 
+                       dx=0.5, 
+                       rho_ini=rho_ini, 
+                       maxinter=25*maxn, 
+                       c=npy.sqrt(E/rho_ini), 
+                       E=E, v=v, Kb=Kb, Gs=Gs, DE=DE)
     
     pts.generate_real_coords(mp=mp, np=np)
     pts.generate_virt_coords(pp=pp, op=op, nlayer=nlayer)

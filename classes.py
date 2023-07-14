@@ -4,7 +4,7 @@ import typing
 import h5py
 
 class particles:
-    def __init__(self, maxn: int, dx: float, rho_ini: float, maxinter: int, c: float):
+    def __init__(self, maxn: int, dx: float, rho_ini: float, maxinter: int, c: float, **customvals):
 
         self.dx = dx
         self.h = 1.5*dx
@@ -25,6 +25,8 @@ class particles:
 
         self.pairs = np.ndarray((maxinter, 2))
 
+        self.customvals = customvals
+
     def generate_real_coords(self):
 
         pass
@@ -33,12 +35,16 @@ class particles:
 
         pass
 
-    def stress_update(self):
+    def stress_update(self, i: int, dstraini: np.ndarray, sigma0: np.ndarray):
 
-        for i in range(self.ntotal+self.nvirt):
-            p = self.c*self.c*(self.rho[i] - self.rho_ini)
-            self.sigma[i, 0:3] = -p/3.
-            self.sigma[i, 3] = 0.
+        dsig = np.matmul(self.customvals['DE'], dstraini[:])
+
+        self.sigma[i, :] = sigma0[:] + dsig[:]
+
+        # for i in range(self.ntotal+self.nvirt):
+        #     p = self.c*self.c*(self.rho[i] - self.rho_ini)
+        #     self.sigma[i, 0:3] = -p/3.
+        #     self.sigma[i, 3] = 0.
 
     def findpairs(self):
 
@@ -61,7 +67,7 @@ class particles:
             rr = np.dot(dx[:], dx[:])
             muv = self.h*vr/(rr + self.h*self.h*0.01)
             mrho = 0.5*(self.rho[i]+self.rho[j])
-            piv = self.mass*0.1*(muv-self.c)*muv/mrho*dwdx
+            piv = self.mass*0.2*(muv-self.c)*muv/mrho*dwdx
             dvdt[i, :] -= piv[:]
             dvdt[j, :] += piv[:]
             
@@ -144,13 +150,11 @@ class integrators:
                 pts.rho[i] += 0.5*dt*drhodt[i]
                 if pts.type[i] > 0:
                     pts.v[i, :] += 0.5*dt*dvdt[i, :]
-                #pts.stress_update(i, 0.5*dt*dstraindt[i, :], sigma0[i, :])
+                pts.stress_update(i, 0.5*dt*dstraindt[i, :], sigma0[i, :])
 
             dvdt = np.tile(self.f, (pts.ntotal+pts.nvirt, 1))
             drhodt = np.zeros(pts.ntotal+pts.nvirt)
             dstraindt = np.zeros((pts.ntotal+pts.nvirt, 4))
-
-            pts.stress_update()
             
             pts.pair_sweep(dvdt, drhodt, dstraindt, self.kernel)
 
@@ -159,7 +163,7 @@ class integrators:
                 if pts.type[i] > 0:
                     pts.v[i, :] = v0[i, :] + dt*dvdt[i, :]
                     pts.x[i, :] += dt*pts.v[i, :]
-                #pts.stress_update(i, dt*dstraindt[i, :], sigma0[i, :])
+                pts.stress_update(i, dt*dstraindt[i, :], sigma0[i, :])
                 pts.strain[i, :] += dt*dstraindt[i, :]
 
             if itimestep % self.printtimestep == 0:
