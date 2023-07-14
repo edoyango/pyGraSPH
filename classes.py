@@ -35,9 +35,10 @@ class particles:
 
         pass
 
-    def stress_update(self, i: int, dstraini: np.ndarray, sigma0: np.ndarray):
+    def stress_update(self, i: int, dstraini: np.ndarray, drxyi: float, sigma0: np.ndarray):
 
         dsig = np.matmul(self.customvals['DE'], dstraini[:])
+        dsig[3] += sigma0[0]*drxyi - sigma0[1]*drxyi
 
         self.sigma[i, :] = sigma0[:] + dsig[:]
 
@@ -55,6 +56,7 @@ class particles:
                    dvdt: np.ndarray, 
                    drhodt: np.ndarray, 
                    dstraindt: np.ndarray, 
+                   rxy: np.ndarray,
                    kernel: typing.Type):
 
         for i, j in self.pairs:
@@ -91,16 +93,19 @@ class particles:
             he[1] = -dv[1]*dwdx[1]
             #he[2] = 0.
             he[3] = -0.5*(dv[0]*dwdx[1]+dv[1]*dwdx[0])
+            hrxy = -0.5*(dv[0]*dwdx[1] - dv[1]*dwdx[0])
 
             dstraindt[i, 0] += self.mass*he[0]/self.rho[j]
             dstraindt[i, 1] += self.mass*he[1]/self.rho[j]
             # dstraindt[i, 2] += self.mass*he[2]/self.rho[j]
             dstraindt[i, 3] += self.mass*he[3]/self.rho[j]
+            rxy[i] += self.mass*hrxy/self.rho[j]
 
             dstraindt[j, 0] += self.mass*he[0]/self.rho[i]
             dstraindt[j, 1] += self.mass*he[1]/self.rho[i]
             # dstraindt[j, 2] += self.mass*he[2]/self.rho[i]
             dstraindt[j, 3] += self.mass*he[3]/self.rho[i]
+            rxy[j] += self.mass*hrxy/self.rho[i]
 
     def save_data(self, itimestep: int):
 
@@ -134,6 +139,7 @@ class integrators:
         drhodt = np.zeros(pts.ntotal+pts.nvirt)
         rho0 = np.empty(pts.ntotal+pts.nvirt)
         dstraindt = np.zeros((pts.ntotal+pts.nvirt, 4))
+        rxy = np.zeros(pts.ntotal+pts.nvirt)
         sigma0 = np.empty((pts.ntotal+pts.nvirt, 4))
 
         dt = self.cfl*pts.dx*3./pts.c
@@ -150,20 +156,21 @@ class integrators:
                 pts.rho[i] += 0.5*dt*drhodt[i]
                 if pts.type[i] > 0:
                     pts.v[i, :] += 0.5*dt*dvdt[i, :]
-                pts.stress_update(i, 0.5*dt*dstraindt[i, :], sigma0[i, :])
+                pts.stress_update(i, 0.5*dt*dstraindt[i, :], 0.5*dt*rxy[i], sigma0[i, :])
 
             dvdt = np.tile(self.f, (pts.ntotal+pts.nvirt, 1))
             drhodt = np.zeros(pts.ntotal+pts.nvirt)
             dstraindt = np.zeros((pts.ntotal+pts.nvirt, 4))
+            rxy = np.zeros(pts.ntotal+pts.nvirt)
             
-            pts.pair_sweep(dvdt, drhodt, dstraindt, self.kernel)
+            pts.pair_sweep(dvdt, drhodt, dstraindt, rxy, self.kernel)
 
             for i in range(pts.ntotal+pts.nvirt):
                 pts.rho[i] = rho0[i] + dt*drhodt[i]
                 if pts.type[i] > 0:
                     pts.v[i, :] = v0[i, :] + dt*dvdt[i, :]
                     pts.x[i, :] += dt*pts.v[i, :]
-                pts.stress_update(i, dt*dstraindt[i, :], sigma0[i, :])
+                pts.stress_update(i, dt*dstraindt[i, :], dt*rxy[i], sigma0[i, :])
                 pts.strain[i, :] += dt*dstraindt[i, :]
 
             if itimestep % self.printtimestep == 0:
