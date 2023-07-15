@@ -15,13 +15,13 @@ class particles:
         self.nvirt = 0
         self.c = c
 
-        self.x = np.zeros((maxn, 2))
-        self.v = np.zeros((maxn, 2))
-        self.rho = np.full(maxn, rho_ini)
-        self.id = np.arange(maxn)
-        self.type = np.ones(maxn)
-        self.strain = np.zeros((maxn, 4))
-        self.sigma = np.zeros((maxn, 4))
+        self.x = np.zeros((maxn, 2), dtype=np.float64)
+        self.v = np.zeros((maxn, 2), dtype=np.float64)
+        self.rho = np.full(maxn, rho_ini, dtype=np.float64)
+        self.id = np.arange(maxn, dtype=np.int32)
+        self.type = np.ones(maxn, dtype=np.int32)
+        self.strain = np.zeros((maxn, 4), dtype=np.float64)
+        self.sigma = np.zeros((maxn, 4), dtype=np.float64)
 
         self.pairs = np.ndarray((maxinter, 2))
 
@@ -86,12 +86,38 @@ class particles:
                    dstraindt: np.ndarray, 
                    rxy: np.ndarray,
                    kernel: typing.Type):
+        
+        self.v[self.ntotal:self.ntotal+self.nvirt, :].fill(0.)
+        self.rho[self.ntotal:self.ntotal+self.nvirt].fill(0.)
+        self.sigma[self.ntotal:self.ntotal+self.nvirt, :].fill(0.)
+        vw = np.zeros(self.ntotal+self.nvirt, dtype=np.float64)
+        
+        for i, j in self.pairs:
+
+            if self.type[i] < 0 and self.type[j] > 0:
+                w = kernel.w(np.linalg.norm(self.x[i, :]-self.x[j,:]))
+                vw[i] += w*self.mass/self.rho[j]
+                self.v[i, :] -= self.v[j, :]*self.mass/self.rho[j]*w
+                self.rho[i] += self.mass*w
+                self.sigma[i, :] += self.sigma[j, :]*self.mass/self.rho[j]*w
+            elif self.type[i] > 0 and self.type[j] < 0:
+                w = kernel.w(np.linalg.norm(self.x[i, :]-self.x[j,:]))
+                vw[j] += w*self.mass/self.rho[i]
+                self.v[j, :] -= self.v[i, :]*self.mass/self.rho[i]*w
+                self.rho[j] += self.mass*w
+                self.sigma[j, :] += self.sigma[i, :]*self.mass/self.rho[i]*w
+
+        for i in range(self.ntotal, self.ntotal+self.nvirt):
+            if vw[i] > 0.:
+                self.v[i, :] /= vw[i]
+                self.rho[i] /= vw[i]
+                self.sigma[i, :] /= vw[i]
+            else:
+                self.rho[i] = self.rho_ini
 
         for i, j in self.pairs:
 
             if self.type[i] > 0 or self.type[j] > 0:
-
-                # if self.type[i] == -1: # bottom boundary
                     
                 dx = self.x[i, :] - self.x[j, :]
                 dwdx = kernel.dwdx(dx)
@@ -106,7 +132,6 @@ class particles:
                 dvdt[i, :] -= piv[:]
                 dvdt[j, :] += piv[:]
 
-                # dvdt[i, :] += 0
                 h = self.mass*((self.sigma[i, 0]*dwdx[0]+self.sigma[i, 3]*dwdx[1])/self.rho[i]**2 + 
                                 (self.sigma[j, 0]*dwdx[0]+self.sigma[j, 3]*dwdx[1])/self.rho[j]**2)
                 dvdt[i, 0] += h
@@ -121,7 +146,7 @@ class particles:
                 drhodt[i] += tmp_drhodt
                 drhodt[j] += tmp_drhodt
 
-                he = np.zeros(4)
+                he = np.zeros(4, dtype=np.float64)
                 he[0] = -dv[0]*dwdx[0]
                 he[1] = -dv[1]*dwdx[1]
                 #he[2] = 0.
@@ -168,12 +193,12 @@ class integrators:
     def LF(self, pts: particles):
 
         dvdt = np.tile(self.f, (pts.ntotal+pts.nvirt, 1))
-        v0 = np.empty((pts.ntotal+pts.nvirt, 2))
-        drhodt = np.zeros(pts.ntotal+pts.nvirt)
-        rho0 = np.empty(pts.ntotal+pts.nvirt)
-        dstraindt = np.zeros((pts.ntotal+pts.nvirt, 4))
-        rxy = np.zeros(pts.ntotal+pts.nvirt)
-        sigma0 = np.empty((pts.ntotal+pts.nvirt, 4))
+        v0 = np.empty((pts.ntotal+pts.nvirt, 2), dtype=np.float64)
+        drhodt = np.zeros(pts.ntotal+pts.nvirt, dtype=np.float64)
+        rho0 = np.empty(pts.ntotal+pts.nvirt, dtype=np.float64)
+        dstraindt = np.zeros((pts.ntotal+pts.nvirt, 4), dtype=np.float64)
+        rxy = np.zeros(pts.ntotal+pts.nvirt, dtype=np.float64)
+        sigma0 = np.empty((pts.ntotal+pts.nvirt, 4), dtype=np.float64)
 
         dt = self.cfl*pts.dx*3./pts.c
 
@@ -185,10 +210,9 @@ class integrators:
             rho0 = np.copy(pts.rho[0:pts.ntotal+pts.nvirt])
             sigma0 = np.copy(pts.sigma[0:pts.ntotal+pts.nvirt, :])
 
-            for i in range(pts.ntotal+pts.nvirt):
+            for i in range(pts.ntotal):
                 pts.rho[i] += 0.5*dt*drhodt[i]
-                if pts.type[i] > 0:
-                    pts.v[i, :] += 0.5*dt*dvdt[i, :]
+                pts.v[i, :] += 0.5*dt*dvdt[i, :]
                 pts.stress_update(i, 0.5*dt*dstraindt[i, :], 0.5*dt*rxy[i], sigma0[i, :])
 
             dvdt = np.tile(self.f, (pts.ntotal+pts.nvirt, 1))
@@ -198,11 +222,10 @@ class integrators:
             
             pts.pair_sweep(dvdt, drhodt, dstraindt, rxy, self.kernel)
 
-            for i in range(pts.ntotal+pts.nvirt):
+            for i in range(pts.ntotal):
                 pts.rho[i] = rho0[i] + dt*drhodt[i]
-                if pts.type[i] > 0:
-                    pts.v[i, :] = v0[i, :] + dt*dvdt[i, :]
-                    pts.x[i, :] += dt*pts.v[i, :]
+                pts.v[i, :] = v0[i, :] + dt*dvdt[i, :]
+                pts.x[i, :] += dt*pts.v[i, :]
                 pts.stress_update(i, dt*dstraindt[i, :], dt*rxy[i], sigma0[i, :])
                 pts.strain[i, :] += dt*dstraindt[i, :]
 

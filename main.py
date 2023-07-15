@@ -71,6 +71,6 @@ if __name__ == '__main__':
     
     wc2_kernel = kernels.wenland_c2(k=2, h=pts.dx*1.5)
     
-    itgs = classes.integrators(f=g, kernel=wc2_kernel, maxtimestep=100, savetimestep=100, printtimestep=10, cfl=0.2)
+    itgs = classes.integrators(f=g, kernel=wc2_kernel, maxtimestep=2000, savetimestep=100, printtimestep=10, cfl=0.2)
 
     itgs.LF(pts)
