@@ -49,6 +49,11 @@ class particles:
         s = self.sigma[i, :] - I1/3.*Ide[:]
         J2 = 0.5*np.dot(s[:], D2[:]*s[:])
 
+        if J2 == 0 and I1 > self.customvals['k_c']:
+            I1 = self.customvals['k_c']
+            self.sigma[i, 0:3] = I1/3.
+            self.sigma[i, 3] = 0.
+
         f = self.customvals['alpha_phi']*I1 + np.sqrt(J2) - self.customvals['k_c']
 
         if f > 0.:
@@ -58,6 +63,12 @@ class particles:
             dlambda = f/(np.dot(dfdsig[:], D2[:]*np.matmul(self.customvals['DE'][:, :], dgdsig[:])))
 
             self.sigma[i, :] -= np.matmul(self.customvals['DE'][:, :], dlambda*dgdsig[:])
+
+        I1 = self.sigma[i, 0] + self.sigma[i, 1] + self.sigma[i, 2]
+
+        if I1 > self.customvals['k_c']/self.customvals['alpha_phi']:
+            self.sigma[i, 0:3] = self.customvals['k_c']/self.customvals['alpha_phi']/3
+            self.sigma[i, 3] = 0.
 
         # for i in range(self.ntotal+self.nvirt):
         #     p = self.c*self.c*(self.rho[i] - self.rho_ini)
