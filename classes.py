@@ -3,18 +3,21 @@ import scipy as sp
 import typing
 import h5py
 
+# particles base class
 class particles:
     def __init__(self, maxn: int, dx: float, rho_ini: float, maxinter: int, c: float, **customvals):
 
-        self.dx = dx
-        self.h = 1.5*dx
-        self.rho_ini = rho_ini
-        self.mass = rho_ini*dx**2
-        self.maxn = maxn
-        self.ntotal = 0
-        self.nvirt = 0
-        self.c = c
+        # particle constants
+        self.dx = dx               # particle spacing (m)
+        self.h = 1.5*dx            # smoothing length (m)
+        self.rho_ini = rho_ini     # initial/reference density (km/m3)
+        self.mass = rho_ini*dx**2  # mass (kg)
+        self.maxn = maxn           # max number of particles
+        self.ntotal = 0            # initialise no. real particles
+        self.nvirt = 0             # initialise no. virtual particles
+        self.c = c                 # speed of sound in material
 
+        # initialize arrays (dtype necessary to mitigate roundoff errors)
         self.x = np.zeros((maxn, 2), dtype=np.float64)
         self.v = np.zeros((maxn, 2), dtype=np.float64)
         self.rho = np.full(maxn, rho_ini, dtype=np.float64)
@@ -25,16 +28,20 @@ class particles:
 
         self.pairs = np.ndarray((maxinter, 2))
 
+        # custom data in dict
         self.customvals = customvals
 
+    # generate real particles (user to define)
     def generate_real_coords(self):
 
         pass
 
+    # generate virtual particles (user to define)
     def generate_virt_coords(self):
 
         pass
 
+    # stress update function (DP model)
     def stress_update(self, i: int, dstraini: np.ndarray, drxyi: float, sigma0: np.ndarray):
 
         dsig = np.matmul(self.customvals['DE'], dstraini[:])
@@ -75,11 +82,13 @@ class particles:
         #     self.sigma[i, 0:3] = -p/3.
         #     self.sigma[i, 3] = 0.
 
+    # function to update self.pairs - list of particle pairs
     def findpairs(self):
 
         tree = sp.spatial.cKDTree(self.x[0:self.ntotal+self.nvirt, :])
         self.pairs = tree.query_pairs(3*self.dx, output_type='set')
 
+    # function to perform sweep over all particle pairs
     def pair_sweep(self, 
                    dvdt: np.ndarray, 
                    drhodt: np.ndarray, 
@@ -87,11 +96,16 @@ class particles:
                    rxy: np.ndarray,
                    kernel: typing.Type):
         
+        ## update virtual particles' properties first --------------------------
+
+        # zeroing virutal particles' properties
         self.v[self.ntotal:self.ntotal+self.nvirt, :].fill(0.)
         self.rho[self.ntotal:self.ntotal+self.nvirt].fill(0.)
         self.sigma[self.ntotal:self.ntotal+self.nvirt, :].fill(0.)
         vw = np.zeros(self.ntotal+self.nvirt, dtype=np.float64)
         
+        # sweep over all pairs and update virtual particles' properties
+        # only consider real-virtual pairs
         for i, j in self.pairs:
 
             if self.type[i] < 0 and self.type[j] > 0:
@@ -107,6 +121,7 @@ class particles:
                 self.rho[j] += self.mass*w
                 self.sigma[j, :] += self.sigma[i, :]*self.mass/self.rho[i]*w
 
+        # normalize virtual particle properties with summed kernels
         for i in range(self.ntotal, self.ntotal+self.nvirt):
             if vw[i] > 0.:
                 self.v[i, :] /= vw[i]
@@ -115,13 +130,17 @@ class particles:
             else:
                 self.rho[i] = self.rho_ini
 
+        # sweep over all pairs to update real particles' material rates --------
         for i, j in self.pairs:
 
+            # only consider real-real or real-virtual (exclude virtual-virtual)
             if self.type[i] > 0 or self.type[j] > 0:
-                    
+                
+                # calculate differential position vector and kernel gradient
                 dx = self.x[i, :] - self.x[j, :]
                 dwdx = kernel.dwdx(dx)
 
+                # update acceleration with artificial viscosity
                 dv = self.v[i, :] - self.v[j, :]
                 vr = np.dot(dv[:], dx[:])
                 if vr > 0.: vr = 0.
@@ -132,6 +151,8 @@ class particles:
                 dvdt[i, :] -= piv[:]
                 dvdt[j, :] += piv[:]
 
+                # update acceleration with div stress
+                # using momentum consertive form
                 h = self.mass*((self.sigma[i, 0]*dwdx[0]+self.sigma[i, 3]*dwdx[1])/self.rho[i]**2 + 
                                 (self.sigma[j, 0]*dwdx[0]+self.sigma[j, 3]*dwdx[1])/self.rho[j]**2)
                 dvdt[i, 0] += h
@@ -146,6 +167,7 @@ class particles:
                 drhodt[i] += tmp_drhodt
                 drhodt[j] += tmp_drhodt
 
+                # calculating engineering strain rates
                 he = np.zeros(4, dtype=np.float64)
                 he[0] = -dv[0]*dwdx[0]
                 he[1] = -dv[1]*dwdx[1]
@@ -165,16 +187,19 @@ class particles:
                 dstraindt[j, 3] += self.mass*he[3]/self.rho[i]
                 rxy[j] += self.mass*hrxy/self.rho[i]
 
+    # function to save particle data
     def save_data(self, itimestep: int):
 
         with h5py.File(f'output/sph_{itimestep}.h5', 'w') as f:
             f.attrs.create("n", data=self.ntotal+self.nvirt, dtype="i")
             f.create_dataset("x", data=self.x[0:self.ntotal+self.nvirt, :], dtype="f8", compression="gzip")
+            f.create_dataset("v", data=self.v[0:self.ntotal+self.nvirt, :], dtype="f8", compression="gzip")
             f.create_dataset("type", data=self.type[0:self.ntotal+self.nvirt], dtype="i", compression="gzip")
             f.create_dataset("rho", data=self.rho[0:self.ntotal+self.nvirt], dtype="f8", compression="gzip")
             f.create_dataset("sigma", data=self.sigma[0:self.ntotal+self.nvirt, :], dtype="f8", compression="gzip")
             f.create_dataset("strain", data=self.strain[0:self.ntotal+self.nvirt, :], dtype="f8", compression="gzip")
-        
+
+# container class to hold time integration functions
 class integrators:
     def __init__(self,
                  f: np.ndarray,
@@ -183,45 +208,54 @@ class integrators:
                  savetimestep: int,
                  printtimestep: int,
                  cfl: float):
-        self.cfl = cfl
-        self.f = f
-        self.kernel = kernel
-        self.maxtimestep = maxtimestep
-        self.savetimestep = savetimestep
-        self.printtimestep = printtimestep
+        self.cfl = cfl # Courant-Freidrichs-Lewy coefficient for time-step size
+        self.f = f     # body force vector e.g. gravity
+        self.kernel = kernel # kernel function of choice
+        self.maxtimestep = maxtimestep # timestep to run simulation for
+        self.savetimestep = savetimestep # timestep interval to save data to disk
+        self.printtimestep = printtimestep # timestep interval to print timestep
 
     def LF(self, pts: particles):
 
-        dvdt = np.tile(self.f, (pts.ntotal+pts.nvirt, 1))
-        v0 = np.empty((pts.ntotal+pts.nvirt, 2), dtype=np.float64)
-        drhodt = np.zeros(pts.ntotal+pts.nvirt, dtype=np.float64)
-        rho0 = np.empty(pts.ntotal+pts.nvirt, dtype=np.float64)
-        dstraindt = np.zeros((pts.ntotal+pts.nvirt, 4), dtype=np.float64)
-        rxy = np.zeros(pts.ntotal+pts.nvirt, dtype=np.float64)
-        sigma0 = np.empty((pts.ntotal+pts.nvirt, 4), dtype=np.float64)
+        # initialize arrays needed for time integration
+        dvdt = np.tile(self.f, (pts.ntotal+pts.nvirt, 1)) # acceleration
+        v0 = np.empty((pts.ntotal+pts.nvirt, 2), dtype=np.float64) # velocity at start of timestep
+        drhodt = np.zeros(pts.ntotal+pts.nvirt, dtype=np.float64) # density change rate
+        rho0 = np.empty(pts.ntotal+pts.nvirt, dtype=np.float64) # density at start of timestep
+        dstraindt = np.zeros((pts.ntotal+pts.nvirt, 4), dtype=np.float64) # strain rate
+        rxy = np.zeros(pts.ntotal+pts.nvirt, dtype=np.float64) # spin rate (for jaumann stress-rate)
+        sigma0 = np.empty((pts.ntotal+pts.nvirt, 4), dtype=np.float64) # stress at start of timestep
 
+        # timestep size (s)
         dt = self.cfl*pts.dx*3./pts.c
 
-        for itimestep in range(self.maxtimestep):
+        # begin time integration loop
+        for itimestep in range(1, self.maxtimestep+1):
 
+            # find pairs
             pts.findpairs()
 
+            # save data from start of timestep
             v0 = np.copy(pts.v[0:pts.ntotal+pts.nvirt, :])
             rho0 = np.copy(pts.rho[0:pts.ntotal+pts.nvirt])
             sigma0 = np.copy(pts.sigma[0:pts.ntotal+pts.nvirt, :])
 
+            # Update data to mid-timestep
             for i in range(pts.ntotal):
                 pts.rho[i] += 0.5*dt*drhodt[i]
                 pts.v[i, :] += 0.5*dt*dvdt[i, :]
                 pts.stress_update(i, 0.5*dt*dstraindt[i, :], 0.5*dt*rxy[i], sigma0[i, :])
 
+            # initialize material rate arrays
             dvdt = np.tile(self.f, (pts.ntotal+pts.nvirt, 1))
             drhodt = np.zeros(pts.ntotal+pts.nvirt)
             dstraindt = np.zeros((pts.ntotal+pts.nvirt, 4))
             rxy = np.zeros(pts.ntotal+pts.nvirt)
             
+            # perform sweep of pairs
             pts.pair_sweep(dvdt, drhodt, dstraindt, rxy, self.kernel)
 
+            # update data to full-timestep
             for i in range(pts.ntotal):
                 pts.rho[i] = rho0[i] + dt*drhodt[i]
                 pts.v[i, :] = v0[i, :] + dt*dvdt[i, :]
@@ -229,8 +263,10 @@ class integrators:
                 pts.stress_update(i, dt*dstraindt[i, :], dt*rxy[i], sigma0[i, :])
                 pts.strain[i, :] += dt*dstraindt[i, :]
 
+            # print data to terminal if needed
             if itimestep % self.printtimestep == 0:
                 print(f'time-step: {itimestep}')
             
+            # save data to disk if needed
             if itimestep % self.savetimestep == 0:
                 pts.save_data(itimestep)
