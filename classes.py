@@ -88,52 +88,57 @@ class particles:
                    kernel: typing.Type):
 
         for i, j in self.pairs:
-            dx = self.x[i, :] - self.x[j, :]
-            dwdx = kernel.dwdx(dx)
 
-            dv = self.v[i, :] - self.v[j, :]
-            vr = np.dot(dv[:], dx[:])
-            if vr > 0.: vr = 0.
-            rr = np.dot(dx[:], dx[:])
-            muv = self.h*vr/(rr + self.h*self.h*0.01)
-            mrho = 0.5*(self.rho[i]+self.rho[j])
-            piv = self.mass*0.2*(muv-self.c)*muv/mrho*dwdx
-            dvdt[i, :] -= piv[:]
-            dvdt[j, :] += piv[:]
-            
-            # dvdt[i, :] += 0
-            h = self.mass*((self.sigma[i, 0]*dwdx[0]+self.sigma[i, 3]*dwdx[1])/self.rho[i]**2 + 
-                           (self.sigma[j, 0]*dwdx[0]+self.sigma[j, 3]*dwdx[1])/self.rho[j]**2)
-            dvdt[i, 0] += h
-            dvdt[j, 0] -= h
+            if self.type[i] > 0 or self.type[j] > 0:
 
-            h = self.mass*((self.sigma[i, 3]*dwdx[0]+self.sigma[i, 1]*dwdx[1])/self.rho[i]**2 +
-                           (self.sigma[j, 3]*dwdx[0]+self.sigma[j, 1]*dwdx[1])/self.rho[j]**2)
-            dvdt[i, 1] += h
-            dvdt[j, 1] -= h
+                # if self.type[i] == -1: # bottom boundary
+                    
+                dx = self.x[i, :] - self.x[j, :]
+                dwdx = kernel.dwdx(dx)
 
-            tmp_drhodt = self.mass*np.dot(self.v[i,:]-self.v[j,:], dwdx)
-            drhodt[i] += tmp_drhodt
-            drhodt[j] += tmp_drhodt
+                dv = self.v[i, :] - self.v[j, :]
+                vr = np.dot(dv[:], dx[:])
+                if vr > 0.: vr = 0.
+                rr = np.dot(dx[:], dx[:])
+                muv = self.h*vr/(rr + self.h*self.h*0.01)
+                mrho = 0.5*(self.rho[i]+self.rho[j])
+                piv = self.mass*0.2*(muv-self.c)*muv/mrho*dwdx
+                dvdt[i, :] -= piv[:]
+                dvdt[j, :] += piv[:]
 
-            he = np.zeros(4)
-            he[0] = -dv[0]*dwdx[0]
-            he[1] = -dv[1]*dwdx[1]
-            #he[2] = 0.
-            he[3] = -0.5*(dv[0]*dwdx[1]+dv[1]*dwdx[0])
-            hrxy = -0.5*(dv[0]*dwdx[1] - dv[1]*dwdx[0])
+                # dvdt[i, :] += 0
+                h = self.mass*((self.sigma[i, 0]*dwdx[0]+self.sigma[i, 3]*dwdx[1])/self.rho[i]**2 + 
+                                (self.sigma[j, 0]*dwdx[0]+self.sigma[j, 3]*dwdx[1])/self.rho[j]**2)
+                dvdt[i, 0] += h
+                dvdt[j, 0] -= h
 
-            dstraindt[i, 0] += self.mass*he[0]/self.rho[j]
-            dstraindt[i, 1] += self.mass*he[1]/self.rho[j]
-            # dstraindt[i, 2] += self.mass*he[2]/self.rho[j]
-            dstraindt[i, 3] += self.mass*he[3]/self.rho[j]
-            rxy[i] += self.mass*hrxy/self.rho[j]
+                h = self.mass*((self.sigma[i, 3]*dwdx[0]+self.sigma[i, 1]*dwdx[1])/self.rho[i]**2 +
+                                (self.sigma[j, 3]*dwdx[0]+self.sigma[j, 1]*dwdx[1])/self.rho[j]**2)
+                dvdt[i, 1] += h
+                dvdt[j, 1] -= h
 
-            dstraindt[j, 0] += self.mass*he[0]/self.rho[i]
-            dstraindt[j, 1] += self.mass*he[1]/self.rho[i]
-            # dstraindt[j, 2] += self.mass*he[2]/self.rho[i]
-            dstraindt[j, 3] += self.mass*he[3]/self.rho[i]
-            rxy[j] += self.mass*hrxy/self.rho[i]
+                tmp_drhodt = self.mass*np.dot(self.v[i,:]-self.v[j,:], dwdx)
+                drhodt[i] += tmp_drhodt
+                drhodt[j] += tmp_drhodt
+
+                he = np.zeros(4)
+                he[0] = -dv[0]*dwdx[0]
+                he[1] = -dv[1]*dwdx[1]
+                #he[2] = 0.
+                he[3] = -0.5*(dv[0]*dwdx[1]+dv[1]*dwdx[0])
+                hrxy = -0.5*(dv[0]*dwdx[1] - dv[1]*dwdx[0])
+
+                dstraindt[i, 0] += self.mass*he[0]/self.rho[j]
+                dstraindt[i, 1] += self.mass*he[1]/self.rho[j]
+                # dstraindt[i, 2] += self.mass*he[2]/self.rho[j]
+                dstraindt[i, 3] += self.mass*he[3]/self.rho[j]
+                rxy[i] += self.mass*hrxy/self.rho[j]
+
+                dstraindt[j, 0] += self.mass*he[0]/self.rho[i]
+                dstraindt[j, 1] += self.mass*he[1]/self.rho[i]
+                # dstraindt[j, 2] += self.mass*he[2]/self.rho[i]
+                dstraindt[j, 3] += self.mass*he[3]/self.rho[i]
+                rxy[j] += self.mass*hrxy/self.rho[i]
 
     def save_data(self, itimestep: int):
 

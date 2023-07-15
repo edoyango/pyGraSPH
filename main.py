@@ -37,15 +37,15 @@ if __name__ == '__main__':
     pp = 3*mp
     op = np
     nlayer = 4
-    maxn = 15000
+    maxn = 10000
 
-    E = 60e6
+    E = 0.84e6
     v = 0.3
     Kb = E/(3.*(1.-2.*v))
     Gs = E/(2.*(1.+v))
-    rho_ini = 1600.
+    rho_ini = 2650
     DEcoeff = E/((1.+v)*(1.-2.*v))
-    phi = npy.pi/6
+    phi = npy.pi/9
     psi = 0.
     cohesion = 0.
     alpha_phi = 2.*npy.sin(phi)/(npy.sqrt(3.)*(3.-npy.sin(phi)))
@@ -57,7 +57,7 @@ if __name__ == '__main__':
                                         [  0.,   0.,   0., 1.-2.*v]])
     
     pts = my_particles(maxn=maxn, 
-                       dx=0.5, 
+                       dx=0.002, 
                        rho_ini=rho_ini, 
                        maxinter=25*maxn, 
                        c=npy.sqrt(E/rho_ini), 
@@ -71,6 +71,6 @@ if __name__ == '__main__':
     
     wc2_kernel = kernels.wenland_c2(k=2, h=pts.dx*1.5)
     
-    itgs = classes.integrators(f=g, kernel=wc2_kernel, maxtimestep=1000, savetimestep=100, printtimestep=10, cfl=0.2)
+    itgs = classes.integrators(f=g, kernel=wc2_kernel, maxtimestep=100, savetimestep=100, printtimestep=10, cfl=0.2)
 
     itgs.LF(pts)
