@@ -78,7 +78,7 @@ class particles:
     def findpairs(self):
 
         tree = sp.spatial.cKDTree(self.x[0:self.ntotal+self.nvirt, :])
-        self.pairs = tree.query_pairs(3*self.dx, output_type='ndarray')
+        self.pairs = tree.query_pairs(3*self.dx, output_type='set')
 
     def pair_sweep(self, 
                    dvdt: np.ndarray, 
