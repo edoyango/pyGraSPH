@@ -44,25 +44,34 @@ class particles:
     # stress update function (DP model)
     def stress_update(self, i: int, dstraini: np.ndarray, drxyi: float, sigma0: np.ndarray):
 
+        # elastic predictor stress increment
         dsig = np.matmul(self.customvals['DE'], dstraini[:])
+        # update stress increment with Jaumann stress-rate
         dsig[3] += sigma0[0]*drxyi - sigma0[1]*drxyi
 
+        # update stress state
         self.sigma[i, :] = sigma0[:] + dsig[:]
 
+        # define identity and D2 matrisices (Voigt notation)
         Ide = np.ascontiguousarray([1, 1, 1, 0])
         D2 = np.ascontiguousarray([1, 1, 1, 2])
 
+        # stress invariants
         I1 = self.sigma[i, 0] + self.sigma[i, 1] + self.sigma[i, 2]
         s = self.sigma[i, :] - I1/3.*Ide[:]
         J2 = 0.5*np.dot(s[:], D2[:]*s[:])
 
+        # tensile cracking check 1: 
+        # J2 is zero but I1 is beyond apex of yield surface
         if J2 == 0 and I1 > self.customvals['k_c']:
             I1 = self.customvals['k_c']
             self.sigma[i, 0:3] = I1/3.
             self.sigma[i, 3] = 0.
 
+        # calculate yield function
         f = self.customvals['alpha_phi']*I1 + np.sqrt(J2) - self.customvals['k_c']
 
+        # Perform corrector step
         if f > 0.:
             dfdsig = self.customvals['alpha_phi']*Ide[:] + s[:]/(2.*np.sqrt(J2))
             dgdsig = self.customvals['alpha_psi']*Ide[:] + s[:]/(2.*np.sqrt(J2))
@@ -71,12 +80,14 @@ class particles:
 
             self.sigma[i, :] -= np.matmul(self.customvals['DE'][:, :], dlambda*dgdsig[:])
 
+        # tensile cracking check 2:
+        # corrected stress state is outside yield surface
         I1 = self.sigma[i, 0] + self.sigma[i, 1] + self.sigma[i, 2]
-
         if I1 > self.customvals['k_c']/self.customvals['alpha_phi']:
             self.sigma[i, 0:3] = self.customvals['k_c']/self.customvals['alpha_phi']/3
             self.sigma[i, 3] = 0.
 
+        # simple fluid equation of state.
         # for i in range(self.ntotal+self.nvirt):
         #     p = self.c*self.c*(self.rho[i] - self.rho_ini)
         #     self.sigma[i, 0:3] = -p/3.
