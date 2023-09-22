@@ -3,6 +3,10 @@ import scipy as sp
 import typing
 import h5py
 
+# define identity and D2 matrisices (Voigt notation)
+IDE = np.ascontiguousarray([1, 1, 1, 0])
+D2 = np.ascontiguousarray([1, 1, 1, 2])
+
 # particles base class
 class particles:
     def __init__(self, maxn: int, dx: float, rho_ini: float, maxinter: int, c: float, **customvals):
@@ -46,10 +50,7 @@ class particles:
 
         self.sigma[0:self.ntotal, :] = sigma0[0:self.ntotal, :] + np.matmul(dstrain[0:self.ntotal], self.customvals['DE'])
         self.sigma[0:self.ntotal, 3] += sigma0[0:self.ntotal, 0]*drxy[0:self.ntotal] - sigma0[0:self.ntotal, 1]*drxy[0:self.ntotal]
-
-        # define identity and D2 matrisices (Voigt notation)
-        Ide = np.ascontiguousarray([1, 1, 1, 0])
-        D2 = np.ascontiguousarray([1, 1, 1, 2])
+        
         s = np.zeros(4)
         dfdsig = np.zeros(4)
         dgdsig = np.zeros(4)
@@ -58,20 +59,14 @@ class particles:
 
             # stress invariants
             I1 = self.sigma[i, 0] + self.sigma[i, 1] + self.sigma[i, 2]
-            s[0] = self.sigma[i, 0] - I1/3.
-            s[1] = self.sigma[i, 1] - I1/3.
-            s[2] = self.sigma[i, 2] - I1/3.
-            s[3] = self.sigma[i, 3]
-            J2 = 0.5*(s[0]*s[0]+s[1]*s[1]+s[2]*s[2]+2.*s[3]*s[3]) #np.dot(s[:], D2[:]*s[:])
+            s[0:4] = self.sigma[i, 0:4] - I1/3.*IDE[0:4]
+            J2 = 0.5*(s[0]*s[0]+s[1]*s[1]+s[2]*s[2]+2.*s[3]*s[3])
 
             # tensile cracking check 1: 
             # J2 is zero but I1 is beyond apex of yield surface
             if J2 == 0 and I1 > self.customvals['k_c']:
                 I1 = self.customvals['k_c']
-                self.sigma[i, 0] = I1/3.
-                self.sigma[i, 1] = I1/3.
-                self.sigma[i, 2] = I1/3.
-                self.sigma[i, 3] = 0.
+                self.sigma[i, 0:4] = I1/3.*IDE[0:4]
 
             # calculate yield function
             f = self.customvals['alpha_phi']*I1 + np.sqrt(J2) - self.customvals['k_c']
@@ -87,9 +82,9 @@ class particles:
                 dgdsig[2] = self.customvals['alpha_psi'] + s[2]/(2.*np.sqrt(J2))
                 dgdsig[3] = s[3]/(2.*np.sqrt(J2))
 
-                dlambda = f/(np.dot(dfdsig[:], D2[:]*np.matmul(self.customvals['DE'][:, :], dgdsig[:])))
+                dlambda = f/(np.dot(dfdsig[0:4], D2[0:4]*np.matmul(self.customvals['DE'][0:4, 0:4], dgdsig[0:4])))
 
-                self.sigma[i, :] -= np.matmul(self.customvals['DE'][:, :], dlambda*dgdsig[:])
+                self.sigma[i, 0:4] -= np.matmul(self.customvals['DE'][0:4, 0:4], dlambda*dgdsig[0:4])
 
             # tensile cracking check 2:
             # corrected stress state is outside yield surface
@@ -108,7 +103,7 @@ class particles:
     def findpairs(self):
 
         tree = sp.spatial.cKDTree(self.x[0:self.ntotal+self.nvirt, :])
-        self.pairs = tree.query_pairs(3*self.dx, output_type='set')
+        self.pairs = tree.query_pairs(3*self.dx, output_type='ndarray')
 
     # function to perform sweep over all particle pairs
     def pair_sweep(self, 
@@ -128,27 +123,29 @@ class particles:
         
         # sweep over all pairs and update virtual particles' properties
         # only consider real-virtual pairs
-        for i, j in self.pairs:
+        for k in range(self.pairs.shape[0]):
+            i = self.pairs[k, 0]
+            j = self.pairs[k, 1]
 
             if self.type[i] < 0 and self.type[j] > 0:
                 w = kernel.w(np.linalg.norm(self.x[i, :]-self.x[j,:]))
                 vw[i] += w*self.mass/self.rho[j]
-                self.v[i, :] -= self.v[j, :]*self.mass/self.rho[j]*w
+                self.v[i, 0:2] -= self.v[j, 0:2]*self.mass/self.rho[j]*w
                 self.rho[i] += self.mass*w
-                self.sigma[i, :] += self.sigma[j, :]*self.mass/self.rho[j]*w
+                self.sigma[i, 0:4] += self.sigma[j, 0:4]*self.mass/self.rho[j]*w
             elif self.type[i] > 0 and self.type[j] < 0:
-                w = kernel.w(np.linalg.norm(self.x[i, :]-self.x[j,:]))
+                w = kernel.w(np.linalg.norm(self.x[i, 0:2]-self.x[j, 0:2]))
                 vw[j] += w*self.mass/self.rho[i]
-                self.v[j, :] -= self.v[i, :]*self.mass/self.rho[i]*w
+                self.v[j, 0:2] -= self.v[i, 0:2]*self.mass/self.rho[i]*w
                 self.rho[j] += self.mass*w
-                self.sigma[j, :] += self.sigma[i, :]*self.mass/self.rho[i]*w
+                self.sigma[j, 0:4] += self.sigma[i, 0:4]*self.mass/self.rho[i]*w
 
         # normalize virtual particle properties with summed kernels
         for i in range(self.ntotal, self.ntotal+self.nvirt):
             if vw[i] > 0.:
-                self.v[i, :] /= vw[i]
+                self.v[i, 0:2] /= vw[i]
                 self.rho[i] /= vw[i]
-                self.sigma[i, :] /= vw[i]
+                self.sigma[i, 0:4] /= vw[i]
             else:
                 self.rho[i] = self.rho_ini
 
@@ -157,36 +154,34 @@ class particles:
         dx = np.zeros(2)
 
         # sweep over all pairs to update real particles' material rates --------
-        for i, j in self.pairs:
+        for k in range(self.pairs.shape[0]):
+            i = self.pairs[k, 0]
+            j = self.pairs[k, 1]
 
             # only consider real-real or real-virtual (exclude virtual-virtual)
             if self.type[i] > 0 or self.type[j] > 0:
                 
                 # calculate differential position vector and kernel gradient
-                dx[0] = self.x[i, 0] - self.x[j, 0]
-                dx[1] = self.x[i, 1] - self.x[j, 1]
+                dx[0:2] = self.x[i, 0:2] - self.x[j, 0:2]
                 dwdx = kernel.dwdx(dx)
 
                 # update acceleration with artificial viscosity
-                dv[0] = self.v[i, 0] - self.v[j, 0]
-                dv[1] = self.v[i, 1] - self.v[j, 0]
+                dv[0:2] = self.v[i, 0:2] - self.v[j, 0:2]
                 vr = dv[0]*dx[0] + dv[1]*dv[1]
                 if vr > 0.: vr = 0.
                 rr = dx[0]*dx[0] + dx[1]*dx[1]
                 muv = self.h*vr/(rr + self.h*self.h*0.01)
                 mrho = 0.5*(self.rho[i]+self.rho[j])
                 piv = self.mass*0.2*(muv-self.c)*muv/mrho*dwdx
-                dvdt[i, 0] -= piv[0]
-                dvdt[i, 1] -= piv[1]
-                dvdt[j, 0] += piv[0]
-                dvdt[j, 1] += piv[1]
+                dvdt[i, 0:2] -= piv[0:2]
+                dvdt[j, 0:2] += piv[0:2]
 
                 # update acceleration with div stress
                 # using momentum consertive form
                 h = self.mass*((self.sigma[i, 0]*dwdx[0]+self.sigma[i, 3]*dwdx[1])/self.rho[i]**2 + 
                                 (self.sigma[j, 0]*dwdx[0]+self.sigma[j, 3]*dwdx[1])/self.rho[j]**2)
                 dvdt[i, 0] += h
-                dvdt[i, 1] += h
+                dvdt[j, 0] += h
 
                 h = self.mass*((self.sigma[i, 3]*dwdx[0]+self.sigma[i, 1]*dwdx[1])/self.rho[i]**2 +
                                 (self.sigma[j, 3]*dwdx[0]+self.sigma[j, 1]*dwdx[1])/self.rho[j]**2)
