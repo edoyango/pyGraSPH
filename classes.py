@@ -124,34 +124,41 @@ class particles:
 
         mass = self.mass
         kernelw = kernel.w
+
+        # cache the references to data
+        pairs = self.pairs
+        x = self.x
+        v = self.v
+        rho = self.rho
+        sigma = self.sigma
         
         # sweep over all pairs and update virtual particles' properties
         # only consider real-virtual pairs
-        for k in range(self.pairs.shape[0]):
-            i = self.pairs[k, 0]
-            j = self.pairs[k, 1]
+        for k in range(pairs.shape[0]):
+            i = pairs[k, 0]
+            j = pairs[k, 1]
 
             if self.type[i] < 0 and self.type[j] > 0:
-                w = kernelw(norm(self.x[i, :]-self.x[j,:]))
-                vw[i] += w*mass/self.rho[j]
-                self.v[i, 0:2] -= self.v[j, 0:2]*mass/self.rho[j]*w
-                self.rho[i] += mass*w
-                self.sigma[i, 0:4] += self.sigma[j, 0:4]*mass/self.rho[j]*w
+                w = kernelw(norm(x[i, :]-x[j,:]))
+                vw[i] += w*mass/rho[j]
+                v[i, 0:2] -= v[j, 0:2]*mass/rho[j]*w
+                rho[i] += mass*w
+                sigma[i, 0:4] += sigma[j, 0:4]*mass/rho[j]*w
             elif self.type[i] > 0 and self.type[j] < 0:
-                w = kernelw(norm(self.x[i, 0:2]-self.x[j, 0:2]))
-                vw[j] += w*mass/self.rho[i]
-                self.v[j, 0:2] -= self.v[i, 0:2]*mass/self.rho[i]*w
-                self.rho[j] += mass*w
-                self.sigma[j, 0:4] += self.sigma[i, 0:4]*mass/self.rho[i]*w
+                w = kernelw(norm(x[i, 0:2]-x[j, 0:2]))
+                vw[j] += w*mass/rho[i]
+                v[j, 0:2] -= v[i, 0:2]*mass/rho[i]*w
+                rho[j] += mass*w
+                sigma[j, 0:4] += sigma[i, 0:4]*mass/rho[i]*w
 
         # normalize virtual particle properties with summed kernels
         for i in range(self.ntotal, self.ntotal+self.nvirt):
             if vw[i] > 0.:
-                self.v[i, 0:2] /= vw[i]
-                self.rho[i] /= vw[i]
-                self.sigma[i, 0:4] /= vw[i]
+                v[i, 0:2] /= vw[i]
+                rho[i] /= vw[i]
+                sigma[i, 0:4] /= vw[i]
             else:
-                self.rho[i] = self.rho_ini
+                rho[i] = self.rho_ini
 
         he = np.zeros(4, dtype=np.float64)
         dv = np.zeros(2)
@@ -160,25 +167,25 @@ class particles:
         kerneldwdx = kernel.dwdx
 
         # sweep over all pairs to update real particles' material rates --------
-        for k in range(self.pairs.shape[0]):
-            i = self.pairs[k, 0]
-            j = self.pairs[k, 1]
+        for k in range(pairs.shape[0]):
+            i = pairs[k, 0]
+            j = pairs[k, 1]
 
             # only consider real-real or real-virtual (exclude virtual-virtual)
             if self.type[i] > 0 or self.type[j] > 0:
 
-                rhoi = self.rho[i]
-                rhoj = self.rho[j]
+                rhoi = rho[i]
+                rhoj = rho[j]
 
-                sigmai = self.sigma[i, 0:4]
-                sigmaj = self.sigma[j, 0:4]
+                sigmai = sigma[i, 0:4]
+                sigmaj = sigma[j, 0:4]
                 
                 # calculate differential position vector and kernel gradient
-                dx[0:2] = self.x[i, 0:2] - self.x[j, 0:2]
+                dx[0:2] = x[i, 0:2] - x[j, 0:2]
                 dwdx = kerneldwdx(dx)
 
                 # update acceleration with artificial viscosity
-                dv[0:2] = self.v[i, 0:2] - self.v[j, 0:2]
+                dv[0:2] = v[i, 0:2] - v[j, 0:2]
                 vr = dv[0]*dx[0] + dv[1]*dv[1]
                 if vr > 0.: vr = 0.
                 rr = dx[0]*dx[0] + dx[1]*dx[1]
