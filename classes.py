@@ -2,6 +2,7 @@ import numpy as np
 import scipy as sp
 import typing
 import h5py
+from numpy.linalg import norm
 
 # define identity and D2 matrisices (Voigt notation)
 IDE = np.ascontiguousarray([1, 1, 1, 0])
@@ -120,6 +121,9 @@ class particles:
         self.rho[self.ntotal:self.ntotal+self.nvirt].fill(0.)
         self.sigma[self.ntotal:self.ntotal+self.nvirt, :].fill(0.)
         vw = np.zeros(self.ntotal+self.nvirt, dtype=np.float64)
+
+        mass = self.mass
+        kernelw = kernel.w
         
         # sweep over all pairs and update virtual particles' properties
         # only consider real-virtual pairs
@@ -128,17 +132,17 @@ class particles:
             j = self.pairs[k, 1]
 
             if self.type[i] < 0 and self.type[j] > 0:
-                w = kernel.w(np.linalg.norm(self.x[i, :]-self.x[j,:]))
-                vw[i] += w*self.mass/self.rho[j]
-                self.v[i, 0:2] -= self.v[j, 0:2]*self.mass/self.rho[j]*w
-                self.rho[i] += self.mass*w
-                self.sigma[i, 0:4] += self.sigma[j, 0:4]*self.mass/self.rho[j]*w
+                w = kernelw(norm(self.x[i, :]-self.x[j,:]))
+                vw[i] += w*mass/self.rho[j]
+                self.v[i, 0:2] -= self.v[j, 0:2]*mass/self.rho[j]*w
+                self.rho[i] += mass*w
+                self.sigma[i, 0:4] += self.sigma[j, 0:4]*mass/self.rho[j]*w
             elif self.type[i] > 0 and self.type[j] < 0:
-                w = kernel.w(np.linalg.norm(self.x[i, 0:2]-self.x[j, 0:2]))
-                vw[j] += w*self.mass/self.rho[i]
-                self.v[j, 0:2] -= self.v[i, 0:2]*self.mass/self.rho[i]*w
-                self.rho[j] += self.mass*w
-                self.sigma[j, 0:4] += self.sigma[i, 0:4]*self.mass/self.rho[i]*w
+                w = kernelw(norm(self.x[i, 0:2]-self.x[j, 0:2]))
+                vw[j] += w*mass/self.rho[i]
+                self.v[j, 0:2] -= self.v[i, 0:2]*mass/self.rho[i]*w
+                self.rho[j] += mass*w
+                self.sigma[j, 0:4] += self.sigma[i, 0:4]*mass/self.rho[i]*w
 
         # normalize virtual particle properties with summed kernels
         for i in range(self.ntotal, self.ntotal+self.nvirt):
@@ -153,6 +157,8 @@ class particles:
         dv = np.zeros(2)
         dx = np.zeros(2)
 
+        kerneldwdx = kernel.dwdx
+
         # sweep over all pairs to update real particles' material rates --------
         for k in range(self.pairs.shape[0]):
             i = self.pairs[k, 0]
@@ -163,10 +169,13 @@ class particles:
 
                 rhoi = self.rho[i]
                 rhoj = self.rho[j]
+
+                sigmai = self.sigma[i, 0:4]
+                sigmaj = self.sigma[j, 0:4]
                 
                 # calculate differential position vector and kernel gradient
                 dx[0:2] = self.x[i, 0:2] - self.x[j, 0:2]
-                dwdx = kernel.dwdx(dx)
+                dwdx = kerneldwdx(dx)
 
                 # update acceleration with artificial viscosity
                 dv[0:2] = self.v[i, 0:2] - self.v[j, 0:2]
@@ -175,23 +184,23 @@ class particles:
                 rr = dx[0]*dx[0] + dx[1]*dx[1]
                 muv = self.h*vr/(rr + self.h*self.h*0.01)
                 mrho = 0.5*(rhoi+rhoj)
-                piv = self.mass*0.2*(muv-self.c)*muv/mrho*dwdx
+                piv = mass*0.2*(muv-self.c)*muv/mrho*dwdx
                 dvdt[i, 0:2] -= piv[0:2]
                 dvdt[j, 0:2] += piv[0:2]
 
                 # update acceleration with div stress
                 # using momentum consertive form
-                h = self.mass*((self.sigma[i, 0]*dwdx[0]+self.sigma[i, 3]*dwdx[1])/rhoi**2 + 
-                                (self.sigma[j, 0]*dwdx[0]+self.sigma[j, 3]*dwdx[1])/rhoj**2)
+                h = mass*((sigmai[0]*dwdx[0]+sigmai[3]*dwdx[1])/rhoi**2 + 
+                                (sigmaj[0]*dwdx[0]+sigmaj[3]*dwdx[1])/rhoj**2)
                 dvdt[i, 0] += h
                 dvdt[j, 0] += h
 
-                h = self.mass*((self.sigma[i, 3]*dwdx[0]+self.sigma[i, 1]*dwdx[1])/rhoi**2 +
-                                (self.sigma[j, 3]*dwdx[0]+self.sigma[j, 1]*dwdx[1])/rhoj**2)
+                h = mass*((sigmai[3]*dwdx[0]+sigmai[1]*dwdx[1])/rhoi**2 +
+                                (sigmaj[3]*dwdx[0]+sigmaj[1]*dwdx[1])/rhoj**2)
                 dvdt[i, 1] += h
                 dvdt[j, 1] -= h
 
-                tmp_drhodt = self.mass*(dv[0]*dwdx[0] + dv[1]*dwdx[1])
+                tmp_drhodt = mass*(dv[0]*dwdx[0] + dv[1]*dwdx[1])
                 drhodt[i] += tmp_drhodt
                 drhodt[j] += tmp_drhodt
 
@@ -202,17 +211,17 @@ class particles:
                 he[3] = -0.5*(dv[0]*dwdx[1]+dv[1]*dwdx[0])
                 hrxy = -0.5*(dv[0]*dwdx[1] - dv[1]*dwdx[0])
 
-                dstraindt[i, 0] += self.mass*he[0]/rhoj
-                dstraindt[i, 1] += self.mass*he[1]/rhoj
-                # dstraindt[i, 2] += self.mass*he[2]/self.rho[j]
-                dstraindt[i, 3] += self.mass*he[3]/rhoj
-                rxy[i] += self.mass*hrxy/rhoj
+                dstraindt[i, 0] += mass*he[0]/rhoj
+                dstraindt[i, 1] += mass*he[1]/rhoj
+                # dstraindt[i, 2] += mass*he[2]/self.rho[j]
+                dstraindt[i, 3] += mass*he[3]/rhoj
+                rxy[i] += mass*hrxy/rhoj
 
-                dstraindt[j, 0] += self.mass*he[0]/rhoi
-                dstraindt[j, 1] += self.mass*he[1]/rhoi
-                # dstraindt[j, 2] += self.mass*he[2]/self.rho[i]
-                dstraindt[j, 3] += self.mass*he[3]/rhoi
-                rxy[j] += self.mass*hrxy/rhoi
+                dstraindt[j, 0] += mass*he[0]/rhoi
+                dstraindt[j, 1] += mass*he[1]/rhoi
+                # dstraindt[j, 2] += mass*he[2]/self.rho[i]
+                dstraindt[j, 3] += mass*he[3]/rhoi
+                rxy[j] += mass*hrxy/rhoi
 
     # function to save particle data
     def save_data(self, itimestep: int):
