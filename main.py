@@ -37,8 +37,8 @@ class my_particles(classes.particles):
 if __name__ == '__main__':
 
     # variables to help define geometry
-    mp = 100 # no. real particles in x
-    np = 50 #                       y
+    mp = 50 # no. real particles in x
+    np = 25 #                       y
     pp = 3*mp # no. virtual particles in x
     op = np #                            y
     nlayer = 4 # number of layers for boundary
