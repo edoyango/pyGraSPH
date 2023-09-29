@@ -188,7 +188,7 @@ class particles:
                 dvdt[i, 1] += h
                 dvdt[j, 1] -= h
 
-                tmp_drhodt = self.mass*(dv[0]*dwdx[0] + dv[1]*dwdx[1])
+                tmp_drhodt = self.mass*((self.v[i, 0] - self.v[j, 0])*dwdx[0] + (self.v[i, 1] - self.v[j, 1])*dwdx[1])
                 drhodt[i] += tmp_drhodt
                 drhodt[j] += tmp_drhodt
 
