@@ -97,7 +97,7 @@ class particles:
     def findpairs(self):
 
         tree = sp.spatial.cKDTree(self.x[0:self.ntotal+self.nvirt, :])
-        self.pairs = tree.query_pairs(3*self.dx, output_type='set')
+        self.pairs = tree.query_pairs(3*self.dx, output_type='ndarray')
 
     def update_virtualparticle_properties(self, kernel: typing.Type):
 
@@ -109,7 +109,9 @@ class particles:
 
         # sweep over all pairs and update virtual particles' properties
         # only consider real-virtual pairs
-        for i, j in self.pairs:
+        for k in range(self.pairs.shape[0]):
+            i = self.pairs[k, 0]
+            j = self.pairs[k, 1]
 
             if self.type[i] < 0 and self.type[j] > 0:
                 w = kernel.w(np.linalg.norm(self.x[i, :]-self.x[j,:]))
@@ -145,61 +147,70 @@ class particles:
         self.update_virtualparticle_properties(kernel)
 
         # sweep over all pairs to update real particles' material rates --------
-        for i, j in self.pairs:
+        # trim pairs to only consider real-real or real-virtual
+        nonvirtvirt_mask = np.logical_or(
+            self.pairs[:, 0] > 0,
+            self.pairs[:, 1] > 0
+        )
+        pairs = self.pairs[nonvirtvirt_mask, :]
+        
+        for k in range(pairs.shape[0]):
+            i = pairs[k, 0]
+            j = pairs[k, 1]
 
             # only consider real-real or real-virtual (exclude virtual-virtual)
-            if self.type[i] > 0 or self.type[j] > 0:
+            # if self.type[i] > 0 or self.type[j] > 0:
                 
-                # calculate differential position vector and kernel gradient
-                dx = self.x[i, :] - self.x[j, :]
-                dwdx = kernel.dwdx(dx)
+            # calculate differential position vector and kernel gradient
+            dx = self.x[i, :] - self.x[j, :]
+            dwdx = kernel.dwdx(dx)
 
-                # update acceleration with artificial viscosity
-                dv = self.v[i, :] - self.v[j, :]
-                vr = np.dot(dv[:], dx[:])
-                if vr > 0.: vr = 0.
-                rr = np.dot(dx[:], dx[:])
-                muv = self.h*vr/(rr + self.h*self.h*0.01)
-                mrho = 0.5*(self.rho[i]+self.rho[j])
-                piv = self.mass*0.2*(muv-self.c)*muv/mrho*dwdx
-                dvdt[i, :] -= piv[:]
-                dvdt[j, :] += piv[:]
+            # update acceleration with artificial viscosity
+            dv = self.v[i, :] - self.v[j, :]
+            vr = np.dot(dv[:], dx[:])
+            if vr > 0.: vr = 0.
+            rr = np.dot(dx[:], dx[:])
+            muv = self.h*vr/(rr + self.h*self.h*0.01)
+            mrho = 0.5*(self.rho[i]+self.rho[j])
+            piv = self.mass*0.2*(muv-self.c)*muv/mrho*dwdx
+            dvdt[i, :] -= piv[:]
+            dvdt[j, :] += piv[:]
 
-                # update acceleration with div stress
-                # using momentum consertive form
-                h = self.mass*((self.sigma[i, 0]*dwdx[0]+self.sigma[i, 3]*dwdx[1])/self.rho[i]**2 + 
-                                (self.sigma[j, 0]*dwdx[0]+self.sigma[j, 3]*dwdx[1])/self.rho[j]**2)
-                dvdt[i, 0] += h
-                dvdt[j, 0] -= h
+            # update acceleration with div stress
+            # using momentum consertive form
+            h = self.mass*((self.sigma[i, 0]*dwdx[0]+self.sigma[i, 3]*dwdx[1])/self.rho[i]**2 + 
+                            (self.sigma[j, 0]*dwdx[0]+self.sigma[j, 3]*dwdx[1])/self.rho[j]**2)
+            dvdt[i, 0] += h
+            dvdt[j, 0] -= h
 
-                h = self.mass*((self.sigma[i, 3]*dwdx[0]+self.sigma[i, 1]*dwdx[1])/self.rho[i]**2 +
-                                (self.sigma[j, 3]*dwdx[0]+self.sigma[j, 1]*dwdx[1])/self.rho[j]**2)
-                dvdt[i, 1] += h
-                dvdt[j, 1] -= h
+            h = self.mass*((self.sigma[i, 3]*dwdx[0]+self.sigma[i, 1]*dwdx[1])/self.rho[i]**2 +
+                            (self.sigma[j, 3]*dwdx[0]+self.sigma[j, 1]*dwdx[1])/self.rho[j]**2)
+            dvdt[i, 1] += h
+            dvdt[j, 1] -= h
 
-                tmp_drhodt = self.mass*np.dot(self.v[i,:]-self.v[j,:], dwdx)
-                drhodt[i] += tmp_drhodt
-                drhodt[j] += tmp_drhodt
+            tmp_drhodt = self.mass*np.dot(self.v[i,:]-self.v[j,:], dwdx)
+            drhodt[i] += tmp_drhodt
+            drhodt[j] += tmp_drhodt
 
-                # calculating engineering strain rates
-                he = np.zeros(4, dtype=np.float64)
-                he[0] = -dv[0]*dwdx[0]
-                he[1] = -dv[1]*dwdx[1]
-                #he[2] = 0.
-                he[3] = -0.5*(dv[0]*dwdx[1]+dv[1]*dwdx[0])
-                hrxy = -0.5*(dv[0]*dwdx[1] - dv[1]*dwdx[0])
+            # calculating engineering strain rates
+            he = np.zeros(4, dtype=np.float64)
+            he[0] = -dv[0]*dwdx[0]
+            he[1] = -dv[1]*dwdx[1]
+            #he[2] = 0.
+            he[3] = -0.5*(dv[0]*dwdx[1]+dv[1]*dwdx[0])
+            hrxy = -0.5*(dv[0]*dwdx[1] - dv[1]*dwdx[0])
 
-                dstraindt[i, 0] += self.mass*he[0]/self.rho[j]
-                dstraindt[i, 1] += self.mass*he[1]/self.rho[j]
-                # dstraindt[i, 2] += self.mass*he[2]/self.rho[j]
-                dstraindt[i, 3] += self.mass*he[3]/self.rho[j]
-                rxy[i] += self.mass*hrxy/self.rho[j]
+            dstraindt[i, 0] += self.mass*he[0]/self.rho[j]
+            dstraindt[i, 1] += self.mass*he[1]/self.rho[j]
+            # dstraindt[i, 2] += self.mass*he[2]/self.rho[j]
+            dstraindt[i, 3] += self.mass*he[3]/self.rho[j]
+            rxy[i] += self.mass*hrxy/self.rho[j]
 
-                dstraindt[j, 0] += self.mass*he[0]/self.rho[i]
-                dstraindt[j, 1] += self.mass*he[1]/self.rho[i]
-                # dstraindt[j, 2] += self.mass*he[2]/self.rho[i]
-                dstraindt[j, 3] += self.mass*he[3]/self.rho[i]
-                rxy[j] += self.mass*hrxy/self.rho[i]
+            dstraindt[j, 0] += self.mass*he[0]/self.rho[i]
+            dstraindt[j, 1] += self.mass*he[1]/self.rho[i]
+            # dstraindt[j, 2] += self.mass*he[2]/self.rho[i]
+            dstraindt[j, 3] += self.mass*he[3]/self.rho[i]
+            rxy[j] += self.mass*hrxy/self.rho[i]
 
     # function to save particle data
     def save_data(self, itimestep: int):
