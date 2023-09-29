@@ -106,7 +106,15 @@ class particles:
         tree = sp.spatial.cKDTree(self.x[0:self.ntotal+self.nvirt, :])
         self.pairs = tree.query_pairs(3*self.dx, output_type='ndarray')
 
-    def update_virtual_particles_properties(self, kernel):
+    # function to perform sweep over all particle pairs
+    def pair_sweep(self, 
+                   dvdt: np.ndarray, 
+                   drhodt: np.ndarray, 
+                   dstraindt: np.ndarray, 
+                   rxy: np.ndarray,
+                   kernel: typing.Type):
+        
+        ## update virtual particles' properties first --------------------------
 
         # zeroing virutal particles' properties
         self.v[self.ntotal:self.ntotal+self.nvirt, :].fill(0.)
@@ -114,10 +122,8 @@ class particles:
         self.sigma[self.ntotal:self.ntotal+self.nvirt, :].fill(0.)
         vw = np.zeros(self.ntotal+self.nvirt, dtype=np.float64)
 
-        # cache reference to kernel.w
-        kernelw = kernel.w
-
         mass = self.mass
+        kernelw = kernel.w
 
         # cache the references to data
         pairs = self.pairs
@@ -153,26 +159,6 @@ class particles:
                 sigma[i, 0:4] /= vw[i]
             else:
                 rho[i] = self.rho_ini
-
-    # function to perform sweep over all particle pairs
-    def pair_sweep(self, 
-                   dvdt: np.ndarray, 
-                   drhodt: np.ndarray, 
-                   dstraindt: np.ndarray, 
-                   rxy: np.ndarray,
-                   kernel: typing.Type):
-        
-        ## update virtual particles' properties first --------------------------
-        self.update_virtual_particles_properties(kernel)
-
-        mass = self.mass
-
-        # cache the references to data
-        pairs = self.pairs
-        x = self.x
-        v = self.v
-        rho = self.rho
-        sigma = self.sigma
 
         he = np.zeros(4, dtype=np.float64)
         dv = np.zeros(2)
