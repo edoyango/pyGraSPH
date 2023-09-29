@@ -252,9 +252,9 @@ class integrators:
             sigma0 = np.copy(pts.sigma[0:pts.ntotal+pts.nvirt, :])
 
             # Update data to mid-timestep
-            pts.rho[0:pts.ntotal] += 0.5*dt*drhodt[0:pts.ntotal]
-            pts.v[0:pts.ntotal, :] += 0.5*dt*dvdt[0:pts.ntotal, :]
             for i in range(pts.ntotal):
+                pts.rho[i] += 0.5*dt*drhodt[i]
+                pts.v[i, :] += 0.5*dt*dvdt[i, :]
                 pts.stress_update(i, 0.5*dt*dstraindt[i, :], 0.5*dt*rxy[i], sigma0[i, :])
 
             # initialize material rate arrays
@@ -267,12 +267,12 @@ class integrators:
             pts.pair_sweep(dvdt, drhodt, dstraindt, rxy, self.kernel)
 
             # update data to full-timestep
-            pts.rho[0:pts.ntotal] = rho0[0:pts.ntotal] + dt*drhodt[0:pts.ntotal]
-            pts.v[0:pts.ntotal, :] = v0[0:pts.ntotal, :] + dt*dvdt[pts.ntotal, :]
-            pts.x[0:pts.ntotal, :] += dt*pts.v[0:pts.ntotal, :]
             for i in range(pts.ntotal):
+                pts.rho[i] = rho0[i] + dt*drhodt[i]
+                pts.v[i, :] = v0[i, :] + dt*dvdt[i, :]
+                pts.x[i, :] += dt*pts.v[i, :]
                 pts.stress_update(i, dt*dstraindt[i, :], dt*rxy[i], sigma0[i, :])
-            pts.strain[0:pts.ntotal, :] += dt*dstraindt[0:pts.ntotal, :]
+                pts.strain[i, :] += dt*dstraindt[i, :]
 
             # print data to terminal if needed
             if itimestep % self.printtimestep == 0:
