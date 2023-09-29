@@ -99,22 +99,14 @@ class particles:
         tree = sp.spatial.cKDTree(self.x[0:self.ntotal+self.nvirt, :])
         self.pairs = tree.query_pairs(3*self.dx, output_type='set')
 
-    # function to perform sweep over all particle pairs
-    def pair_sweep(self, 
-                   dvdt: np.ndarray, 
-                   drhodt: np.ndarray, 
-                   dstraindt: np.ndarray, 
-                   rxy: np.ndarray,
-                   kernel: typing.Type):
-        
-        ## update virtual particles' properties first --------------------------
+    def update_virtualparticle_properties(self, kernel: typing.Type):
 
         # zeroing virutal particles' properties
         self.v[self.ntotal:self.ntotal+self.nvirt, :].fill(0.)
         self.rho[self.ntotal:self.ntotal+self.nvirt].fill(0.)
         self.sigma[self.ntotal:self.ntotal+self.nvirt, :].fill(0.)
         vw = np.zeros(self.ntotal+self.nvirt, dtype=np.float64)
-        
+
         # sweep over all pairs and update virtual particles' properties
         # only consider real-virtual pairs
         for i, j in self.pairs:
@@ -140,6 +132,17 @@ class particles:
                 self.sigma[i, :] /= vw[i]
             else:
                 self.rho[i] = self.rho_ini
+
+    # function to perform sweep over all particle pairs
+    def pair_sweep(self, 
+                   dvdt: np.ndarray, 
+                   drhodt: np.ndarray, 
+                   dstraindt: np.ndarray, 
+                   rxy: np.ndarray,
+                   kernel: typing.Type):
+        
+        ## update virtual particles' properties first --------------------------
+        self.update_virtualparticle_properties(kernel)
 
         # sweep over all pairs to update real particles' material rates --------
         for i, j in self.pairs:
