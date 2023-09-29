@@ -160,9 +160,6 @@ class particles:
 
             # only consider real-real or real-virtual (exclude virtual-virtual)
             if self.type[i] > 0 or self.type[j] > 0:
-
-                rhoi = self.rho[i]
-                rhoj = self.rho[j]
                 
                 # calculate differential position vector and kernel gradient
                 dx[0:2] = self.x[i, 0:2] - self.x[j, 0:2]
@@ -174,20 +171,20 @@ class particles:
                 if vr > 0.: vr = 0.
                 rr = dx[0]*dx[0] + dx[1]*dx[1]
                 muv = self.h*vr/(rr + self.h*self.h*0.01)
-                mrho = 0.5*(rhoi+rhoj)
+                mrho = 0.5*(self.rho[i]+self.rho[j])
                 piv = self.mass*0.2*(muv-self.c)*muv/mrho*dwdx
                 dvdt[i, 0:2] -= piv[0:2]
                 dvdt[j, 0:2] += piv[0:2]
 
                 # update acceleration with div stress
                 # using momentum consertive form
-                h = self.mass*((self.sigma[i, 0]*dwdx[0]+self.sigma[i, 3]*dwdx[1])/rhoi**2 + 
-                                (self.sigma[j, 0]*dwdx[0]+self.sigma[j, 3]*dwdx[1])/rhoj**2)
+                h = self.mass*((self.sigma[i, 0]*dwdx[0]+self.sigma[i, 3]*dwdx[1])/self.rho[i]**2 + 
+                                (self.sigma[j, 0]*dwdx[0]+self.sigma[j, 3]*dwdx[1])/self.rho[j]**2)
                 dvdt[i, 0] += h
                 dvdt[j, 0] += h
 
-                h = self.mass*((self.sigma[i, 3]*dwdx[0]+self.sigma[i, 1]*dwdx[1])/rhoi**2 +
-                                (self.sigma[j, 3]*dwdx[0]+self.sigma[j, 1]*dwdx[1])/rhoj**2)
+                h = self.mass*((self.sigma[i, 3]*dwdx[0]+self.sigma[i, 1]*dwdx[1])/self.rho[i]**2 +
+                                (self.sigma[j, 3]*dwdx[0]+self.sigma[j, 1]*dwdx[1])/self.rho[j]**2)
                 dvdt[i, 1] += h
                 dvdt[j, 1] -= h
 
@@ -202,17 +199,17 @@ class particles:
                 he[3] = -0.5*(dv[0]*dwdx[1]+dv[1]*dwdx[0])
                 hrxy = -0.5*(dv[0]*dwdx[1] - dv[1]*dwdx[0])
 
-                dstraindt[i, 0] += self.mass*he[0]/rhoj
-                dstraindt[i, 1] += self.mass*he[1]/rhoj
+                dstraindt[i, 0] += self.mass*he[0]/self.rho[j]
+                dstraindt[i, 1] += self.mass*he[1]/self.rho[j]
                 # dstraindt[i, 2] += self.mass*he[2]/self.rho[j]
-                dstraindt[i, 3] += self.mass*he[3]/rhoj
-                rxy[i] += self.mass*hrxy/rhoj
+                dstraindt[i, 3] += self.mass*he[3]/self.rho[j]
+                rxy[i] += self.mass*hrxy/self.rho[j]
 
-                dstraindt[j, 0] += self.mass*he[0]/rhoi
-                dstraindt[j, 1] += self.mass*he[1]/rhoi
+                dstraindt[j, 0] += self.mass*he[0]/self.rho[i]
+                dstraindt[j, 1] += self.mass*he[1]/self.rho[i]
                 # dstraindt[j, 2] += self.mass*he[2]/self.rho[i]
-                dstraindt[j, 3] += self.mass*he[3]/rhoi
-                rxy[j] += self.mass*hrxy/rhoi
+                dstraindt[j, 3] += self.mass*he[3]/self.rho[i]
+                rxy[j] += self.mass*hrxy/self.rho[i]
 
     # function to save particle data
     def save_data(self, itimestep: int):
