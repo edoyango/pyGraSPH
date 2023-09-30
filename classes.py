@@ -160,19 +160,34 @@ class particles:
         dv = self.v[pair_i, :] - self.v[pair_j, :]
         dwdx = np.apply_along_axis(kernel.dwdx, 1, dx)
 
+        # update acceleration with artificial viscosity
+        vr = np.einsum("ij,ij->i", dv, dx)
+        vr = np.where(vr > 0, 0., vr)
+        rr = np.einsum("ij,ij->i", dx, dx)
+        muv = self.h*vr[:]/(rr[:] + self.h*self.h*0.01)
+        mrho = 0.5*(self.rho[pair_i]+self.rho[pair_j])
+        piv = -np.einsum("i,ij->ij", 
+            self.mass*0.2*(muv[:]-self.c)*muv[:]/mrho[:],
+            dwdx)
+
+        np.add.at(dvdt[:, 0], pair_i, piv[:, 0])
+        np.add.at(dvdt[:, 1], pair_i, piv[:, 1])
+        np.subtract.at(dvdt[:, 0], pair_j, piv[:, 0])
+        np.subtract.at(dvdt[:, 1], pair_j, piv[:, 1])
+
         for k in range(pair_i.shape[0]):
             i = pair_i[k]
             j = pair_j[k]
 
             # update acceleration with artificial viscosity
-            vr = np.dot(dv[k, :], dx[k, :])
-            if vr > 0.: vr = 0.
-            rr = np.dot(dx[k, :], dx[k, :])
-            muv = self.h*vr/(rr + self.h*self.h*0.01)
-            mrho = 0.5*(self.rho[i]+self.rho[j])
-            piv = self.mass*0.2*(muv-self.c)*muv/mrho*dwdx[k, :]
-            dvdt[i, :] -= piv[:]
-            dvdt[j, :] += piv[:]
+            # vr = np.dot(dv[k, :], dx[k, :])
+            # if vr > 0.: vr = 0.
+            # rr = np.dot(dx[k, :], dx[k, :])
+            # muv = self.h*vr[k]/(rr[k] + self.h*self.h*0.01)
+            # mrho = 0.5*(self.rho[i]+self.rho[j])
+            # piv = self.mass*0.2*(muv[k]-self.c)*muv[k]/mrho*dwdx[k, :]
+            # dvdt[i, :] -= piv[:]
+            # dvdt[j, :] += piv[:]
 
             # update acceleration with div stress
             # using momentum consertive form
