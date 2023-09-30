@@ -42,50 +42,53 @@ class particles:
         pass
 
     # stress update function (DP model)
-    def stress_update(self, i: int, dstraini: np.ndarray, drxyi: float, sigma0: np.ndarray):
+    def stress_update(self, dstrain: np.ndarray, drxy: np.ndarray, sigma0: np.ndarray):
 
         # elastic predictor stress increment
-        dsig = np.matmul(self.customvals['DE'], dstraini[:])
+        dsig = np.matmul(dstrain[0:self.ntotal, :], self.customvals['DE'][:, :])
         # update stress increment with Jaumann stress-rate
-        dsig[3] += sigma0[0]*drxyi - sigma0[1]*drxyi
+        dsig[:, 3] += sigma0[0:self.ntotal, 0]*drxy[0:self.ntotal] - sigma0[0:self.ntotal, 1]*drxy[0:self.ntotal]
 
         # update stress state
-        self.sigma[i, :] = sigma0[:] + dsig[:]
+        # self.sigma[i, :] = sigma0[:] + dsig[:]
+        self.sigma[0:self.ntotal] = sigma0[0:self.ntotal, :] + dsig[:, :]
 
         # define identity and D2 matrisices (Voigt notation)
         Ide = np.ascontiguousarray([1, 1, 1, 0])
         D2 = np.ascontiguousarray([1, 1, 1, 2])
 
-        # stress invariants
-        I1 = self.sigma[i, 0] + self.sigma[i, 1] + self.sigma[i, 2]
-        s = self.sigma[i, :] - I1/3.*Ide[:]
-        J2 = 0.5*np.dot(s[:], D2[:]*s[:])
+        for i in range(self.ntotal):
 
-        # tensile cracking check 1: 
-        # J2 is zero but I1 is beyond apex of yield surface
-        if J2 == 0 and I1 > self.customvals['k_c']:
-            I1 = self.customvals['k_c']
-            self.sigma[i, 0:3] = I1/3.
-            self.sigma[i, 3] = 0.
+            # stress invariants
+            I1 = self.sigma[i, 0] + self.sigma[i, 1] + self.sigma[i, 2]
+            s = self.sigma[i, :] - I1/3.*Ide[:]
+            J2 = 0.5*np.dot(s[:], D2[:]*s[:])
 
-        # calculate yield function
-        f = self.customvals['alpha_phi']*I1 + np.sqrt(J2) - self.customvals['k_c']
+            # tensile cracking check 1: 
+            # J2 is zero but I1 is beyond apex of yield surface
+            if J2 == 0 and I1 > self.customvals['k_c']:
+                I1 = self.customvals['k_c']
+                self.sigma[i, 0:3] = I1/3.
+                self.sigma[i, 3] = 0.
 
-        # Perform corrector step
-        if f > 0.:
-            dfdsig = self.customvals['alpha_phi']*Ide[:] + s[:]/(2.*np.sqrt(J2))
-            dgdsig = self.customvals['alpha_psi']*Ide[:] + s[:]/(2.*np.sqrt(J2))
+            # calculate yield function
+            f = self.customvals['alpha_phi']*I1 + np.sqrt(J2) - self.customvals['k_c']
 
-            dlambda = f/(np.dot(dfdsig[:], D2[:]*np.matmul(self.customvals['DE'][:, :], dgdsig[:])))
+            # Perform corrector step
+            if f > 0.:
+                dfdsig = self.customvals['alpha_phi']*Ide[:] + s[:]/(2.*np.sqrt(J2))
+                dgdsig = self.customvals['alpha_psi']*Ide[:] + s[:]/(2.*np.sqrt(J2))
 
-            self.sigma[i, :] -= np.matmul(self.customvals['DE'][:, :], dlambda*dgdsig[:])
+                dlambda = f/(np.dot(dfdsig[:], D2[:]*np.matmul(self.customvals['DE'][:, :], dgdsig[:])))
 
-        # tensile cracking check 2:
-        # corrected stress state is outside yield surface
-        I1 = self.sigma[i, 0] + self.sigma[i, 1] + self.sigma[i, 2]
-        if I1 > self.customvals['k_c']/self.customvals['alpha_phi']:
-            self.sigma[i, 0:3] = self.customvals['k_c']/self.customvals['alpha_phi']/3
-            self.sigma[i, 3] = 0.
+                self.sigma[i, :] -= np.matmul(self.customvals['DE'][:, :], dlambda*dgdsig[:])
+
+            # tensile cracking check 2:
+            # corrected stress state is outside yield surface
+            I1 = self.sigma[i, 0] + self.sigma[i, 1] + self.sigma[i, 2]
+            if I1 > self.customvals['k_c']/self.customvals['alpha_phi']:
+                self.sigma[i, 0:3] = self.customvals['k_c']/self.customvals['alpha_phi']/3
+                self.sigma[i, 3] = 0.
 
         # simple fluid equation of state.
         # for i in range(self.ntotal+self.nvirt):
@@ -287,7 +290,7 @@ class integrators:
             for i in range(pts.ntotal):
                 pts.rho[i] += 0.5*dt*drhodt[i]
                 pts.v[i, :] += 0.5*dt*dvdt[i, :]
-                pts.stress_update(i, 0.5*dt*dstraindt[i, :], 0.5*dt*rxy[i], sigma0[i, :])
+            pts.stress_update(0.5*dt*dstraindt, 0.5*dt*rxy, sigma0)
 
             # initialize material rate arrays
             dvdt = np.tile(self.f, (pts.ntotal+pts.nvirt, 1))
@@ -298,12 +301,14 @@ class integrators:
             # perform sweep of pairs
             pts.pair_sweep(dvdt, drhodt, dstraindt, rxy, self.kernel)
 
+            pts.stress_update(dt*dstraindt, dt*rxy, sigma0)
+
             # update data to full-timestep
             for i in range(pts.ntotal):
                 pts.rho[i] = rho0[i] + dt*drhodt[i]
                 pts.v[i, :] = v0[i, :] + dt*dvdt[i, :]
                 pts.x[i, :] += dt*pts.v[i, :]
-                pts.stress_update(i, dt*dstraindt[i, :], dt*rxy[i], sigma0[i, :])
+                # pts.stress_update(i, dt*dstraindt[i, :], dt*rxy[i], sigma0[i, :])
                 pts.strain[i, :] += dt*dstraindt[i, :]
 
             # print data to terminal if needed
