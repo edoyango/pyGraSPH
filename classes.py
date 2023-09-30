@@ -49,7 +49,7 @@ class particles:
         k_c = self.customvals['k_c']
         alpha_phi = self.customvals['alpha_phi']
         alpha_psi = self.customvals['alpha_psi']
-        sigma = self.sigma
+        sigma = self.sigma # this stores reference, not the data.
         ntotal = self.ntotal
 
         npdot = np.dot
@@ -114,7 +114,14 @@ class particles:
     def findpairs(self):
 
         tree = sp.spatial.cKDTree(self.x[0:self.ntotal+self.nvirt, :])
-        self.pairs = tree.query_pairs(3*self.dx, output_type='ndarray')
+        pairs = tree.query_pairs(3*self.dx, output_type='ndarray')
+        
+        # trim pairs to only consider real-real or real-virtual
+        nonvirtvirt_mask = np.logical_or(
+            self.type[pairs[:, 0]] > 0,
+            self.type[pairs[:, 1]] > 0
+        )
+        self.pair_i, self.pair_j = pairs[nonvirtvirt_mask, 0], pairs[nonvirtvirt_mask, 1]
 
     def update_virtualparticle_properties(self, kernel: typing.Type):
 
@@ -141,20 +148,20 @@ class particles:
         # sweep over all pairs and update virtual particles' properties
         # only consider real-virtual pairs
         nonvirtvirt_mask = np.logical_and(
-            self.type[self.pairs[:, 0]] < 0,
-            self.type[self.pairs[:, 1]] > 0
+            self.type[self.pair_i] < 0,
+            self.type[self.pair_j] > 0
         )
-        pair_i = self.pairs[nonvirtvirt_mask, 0]
-        pair_j = self.pairs[nonvirtvirt_mask, 1]
+        pair_i = self.pair_i[nonvirtvirt_mask]
+        pair_j = self.pair_j[nonvirtvirt_mask]
 
         update_virti(pair_i, pair_j)
 
         nonvirtvirt_mask = np.logical_and(
-            self.type[self.pairs[:, 0]] > 0,
-            self.type[self.pairs[:, 1]] < 0
+            self.type[self.pair_i] > 0,
+            self.type[self.pair_j] < 0
         )
-        pair_i = self.pairs[nonvirtvirt_mask, 0]
-        pair_j = self.pairs[nonvirtvirt_mask, 1]
+        pair_i = self.pair_i[nonvirtvirt_mask]
+        pair_j = self.pair_j[nonvirtvirt_mask]
 
         update_virti(pair_j, pair_i)
 
@@ -181,13 +188,8 @@ class particles:
         self.update_virtualparticle_properties(kernel)
 
         # sweep over all pairs to update real particles' material rates --------
-        # trim pairs to only consider real-real or real-virtual
-        nonvirtvirt_mask = np.logical_or(
-            self.type[self.pairs[:, 0]] > 0,
-            self.type[self.pairs[:, 1]] > 0
-        )
-        pair_i = self.pairs[nonvirtvirt_mask, 0]
-        pair_j = self.pairs[nonvirtvirt_mask, 1]
+        pair_i = self.pair_i
+        pair_j = self.pair_j
 
         # calculate differential position vector and kernel gradient
         dx = self.x[pair_i, :] - self.x[pair_j, :]
