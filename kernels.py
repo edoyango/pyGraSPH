@@ -9,6 +9,7 @@ class wenland_c2:
         q = r/self.h
         return self.alpha*max(0., 2.-q)**4*(2.*q+1.)
     def dwdx(self, dx: np.ndarray):
-        r = np.linalg.norm(dx)
+        r = np.apply_along_axis(np.linalg.norm, 1, dx)
         q = r/self.h
-        return -self.alpha*10.*q*max(0., 2.-q)**3*dx[:]/(r*self.h)
+        dwdx_coeff = -self.alpha*10.*q[:]*np.maximum(0., 2.-q[:])**3/(r[:]*self.h)
+        return np.einsum("i,ij->ij", dwdx_coeff, dx)

@@ -158,7 +158,8 @@ class particles:
         # calculate differential position vector and kernel gradient
         dx = self.x[pair_i, :] - self.x[pair_j, :]
         dv = self.v[pair_i, :] - self.v[pair_j, :]
-        dwdx = np.apply_along_axis(kernel.dwdx, 1, dx)
+        # dwdx = np.apply_along_axis(kernel.dwdx, 1, dx)
+        dwdx = kernel.dwdx(dx)
 
         # update acceleration with artificial viscosity
         vr = np.einsum("ij,ij->i", dv, dx)
