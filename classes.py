@@ -44,50 +44,65 @@ class particles:
     # stress update function (DP model)
     def stress_update(self, dstrain: np.ndarray, drxy: np.ndarray, sigma0: np.ndarray):
 
+        # cache some values
+        DE = self.customvals['DE'][:, :]
+        k_c = self.customvals['k_c']
+        alpha_phi = self.customvals['alpha_phi']
+        alpha_psi = self.customvals['alpha_psi']
+        sigma = self.sigma
+        ntotal = self.ntotal
+
+        npdot = np.dot
+        npmatmul = np.matmul
+        npsqrt = np.sqrt
+
         # elastic predictor stress increment
-        dsig = np.matmul(dstrain[0:self.ntotal, :], self.customvals['DE'][:, :])
+        dsig = npmatmul(dstrain[0:ntotal, :], DE[:, :])
         # update stress increment with Jaumann stress-rate
-        dsig[:, 3] += sigma0[0:self.ntotal, 0]*drxy[0:self.ntotal] - sigma0[0:self.ntotal, 1]*drxy[0:self.ntotal]
+        dsig[:, 3] += sigma0[0:ntotal, 0]*drxy[0:ntotal] - sigma0[0:ntotal, 1]*drxy[0:ntotal]
 
         # update stress state
-        self.sigma[0:self.ntotal] = sigma0[0:self.ntotal, :] + dsig[:, :]
+        self.sigma[0:ntotal] = sigma0[0:ntotal, :] + dsig[:, :]
 
         # define identity and D2 matrisices (Voigt notation)
         Ide = np.ascontiguousarray([1, 1, 1, 0])
         D2 = np.ascontiguousarray([1, 1, 1, 2])
 
-        for i in range(self.ntotal):
+        s = np.zeros(4)
+
+        for i in range(ntotal):
 
             # stress invariants
-            I1 = self.sigma[i, 0] + self.sigma[i, 1] + self.sigma[i, 2]
-            s = self.sigma[i, :] - I1/3.*Ide[:]
-            J2 = 0.5*np.dot(s[:], D2[:]*s[:])
+            I1 = sigma[i, 0] + sigma[i, 1] + sigma[i, 2]
+            s[0:3] = sigma[i, 0:3] - I1/3.
+            s[3] = sigma[i, 3]
+            J2 = 0.5*npdot(s[:], D2[:]*s[:])
 
             # tensile cracking check 1: 
             # J2 is zero but I1 is beyond apex of yield surface
-            if J2 == 0 and I1 > self.customvals['k_c']:
-                I1 = self.customvals['k_c']
-                self.sigma[i, 0:3] = I1/3.
-                self.sigma[i, 3] = 0.
+            if J2 == 0 and I1 > k_c:
+                I1 = k_c
+                sigma[i, 0:3] = I1/3.
+                sigma[i, 3] = 0.
 
             # calculate yield function
-            f = self.customvals['alpha_phi']*I1 + np.sqrt(J2) - self.customvals['k_c']
+            f = alpha_phi*I1 + npsqrt(J2) - k_c
 
             # Perform corrector step
             if f > 0.:
-                dfdsig = self.customvals['alpha_phi']*Ide[:] + s[:]/(2.*np.sqrt(J2))
-                dgdsig = self.customvals['alpha_psi']*Ide[:] + s[:]/(2.*np.sqrt(J2))
+                dfdsig = alpha_phi*Ide[:] + s[:]/(2.*npsqrt(J2))
+                dgdsig = alpha_psi*Ide[:] + s[:]/(2.*npsqrt(J2))
 
-                dlambda = f/(np.dot(dfdsig[:], D2[:]*np.matmul(self.customvals['DE'][:, :], dgdsig[:])))
+                dlambda = f/(npdot(dfdsig[:], D2[:]*npmatmul(DE[:, :], dgdsig[:])))
 
-                self.sigma[i, :] -= np.matmul(self.customvals['DE'][:, :], dlambda*dgdsig[:])
+                sigma[i, :] -= npmatmul(DE[:, :], dlambda*dgdsig[:])
 
             # tensile cracking check 2:
             # corrected stress state is outside yield surface
-            I1 = self.sigma[i, 0] + self.sigma[i, 1] + self.sigma[i, 2]
-            if I1 > self.customvals['k_c']/self.customvals['alpha_phi']:
-                self.sigma[i, 0:3] = self.customvals['k_c']/self.customvals['alpha_phi']/3
-                self.sigma[i, 3] = 0.
+            I1 = sigma[i, 0] + sigma[i, 1] + sigma[i, 2]
+            if I1 > k_c/alpha_phi:
+                sigma[i, 0:3] = k_c/alpha_phi/3
+                sigma[i, 3] = 0.
 
         # simple fluid equation of state.
         # for i in range(self.ntotal+self.nvirt):
