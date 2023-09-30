@@ -111,14 +111,15 @@ class particles:
             if pair_i.shape[0] > 0:
                 r = np.linalg.norm(self.x[pair_i, :] - self.x[pair_j, :], axis=1)
                 w = np.apply_along_axis(kernel.w, 0, r)
-                np.add.at(vw, pair_i, w[:]*self.mass/self.rho[pair_j])
-                np.subtract.at(self.v[:, 0], pair_i, self.mass*self.v[pair_j, 0]/self.rho[pair_j]*w)
-                np.subtract.at(self.v[:, 1], pair_i, self.mass*self.v[pair_j, 1]/self.rho[pair_j]*w)
+                dvol = self.mass/self.rho[pair_j]
+                np.add.at(vw, pair_i, w[:]*dvol[:])
+                np.subtract.at(self.v[:, 0], pair_i, self.v[pair_j, 0]*w*dvol[:])
+                np.subtract.at(self.v[:, 1], pair_i, self.v[pair_j, 1]*w*dvol[:])
                 np.add.at(self.rho, pair_i, self.mass*w)
-                np.add.at(self.sigma[:, 0], pair_i, self.sigma[pair_j, 0]*self.mass/self.rho[pair_j]*w)
-                np.add.at(self.sigma[:, 1], pair_i, self.sigma[pair_j, 1]*self.mass/self.rho[pair_j]*w)
-                np.add.at(self.sigma[:, 2], pair_i, self.sigma[pair_j, 2]*self.mass/self.rho[pair_j]*w)
-                np.add.at(self.sigma[:, 3], pair_i, self.sigma[pair_j, 3]*self.mass/self.rho[pair_j]*w)
+                np.add.at(self.sigma[:, 0], pair_i, self.sigma[pair_j, 0]*w*dvol[:])
+                np.add.at(self.sigma[:, 1], pair_i, self.sigma[pair_j, 1]*w*dvol[:])
+                np.add.at(self.sigma[:, 2], pair_i, self.sigma[pair_j, 2]*w*dvol[:])
+                np.add.at(self.sigma[:, 3], pair_i, self.sigma[pair_j, 3]*w*dvol[:])
 
         # sweep over all pairs and update virtual particles' properties
         # only consider real-virtual pairs
@@ -141,14 +142,15 @@ class particles:
         update_virti(pair_j, pair_i)
 
         # normalize virtual particle properties with summed kernels
-        self.v[self.ntotal:self.ntotal+self.nvirt, 0] = np.divide(self.v[self.ntotal:self.ntotal+self.nvirt, 0], vw[self.ntotal:self.ntotal+self.nvirt], where=(vw[self.ntotal:self.ntotal+self.nvirt]>0.) )
-        self.v[self.ntotal:self.ntotal+self.nvirt, 1] = np.divide(self.v[self.ntotal:self.ntotal+self.nvirt, 1], vw[self.ntotal:self.ntotal+self.nvirt], where=(vw[self.ntotal:self.ntotal+self.nvirt]>0.) )
-        self.sigma[self.ntotal:self.ntotal+self.nvirt, 0] = np.divide(self.sigma[self.ntotal:self.ntotal+self.nvirt, 0], vw[self.ntotal:self.ntotal+self.nvirt], where=(vw[self.ntotal:self.ntotal+self.nvirt]>0.) )
-        self.sigma[self.ntotal:self.ntotal+self.nvirt, 1] = np.divide(self.sigma[self.ntotal:self.ntotal+self.nvirt, 1], vw[self.ntotal:self.ntotal+self.nvirt], where=(vw[self.ntotal:self.ntotal+self.nvirt]>0.) )
-        self.sigma[self.ntotal:self.ntotal+self.nvirt, 2] = np.divide(self.sigma[self.ntotal:self.ntotal+self.nvirt, 2], vw[self.ntotal:self.ntotal+self.nvirt], where=(vw[self.ntotal:self.ntotal+self.nvirt]>0.) )
-        self.sigma[self.ntotal:self.ntotal+self.nvirt, 3] = np.divide(self.sigma[self.ntotal:self.ntotal+self.nvirt, 3], vw[self.ntotal:self.ntotal+self.nvirt], where=(vw[self.ntotal:self.ntotal+self.nvirt]>0.) )
-        self.rho[self.ntotal:self.ntotal+self.nvirt] = np.divide(self.rho[self.ntotal:self.ntotal+self.nvirt], vw[self.ntotal:self.ntotal+self.nvirt], where=(vw[self.ntotal:self.ntotal+self.nvirt]>0.) )
-        self.rho[self.ntotal:self.ntotal+self.nvirt] = np.where((vw[self.ntotal:self.ntotal+self.nvirt]>0.), self.rho[self.ntotal:self.ntotal+self.nvirt], self.rho_ini)
+        vw_mask = vw[self.ntotal:self.ntotal+self.nvirt]>0.
+        self.v[self.ntotal:self.ntotal+self.nvirt, 0] = np.divide(self.v[self.ntotal:self.ntotal+self.nvirt, 0], vw[self.ntotal:self.ntotal+self.nvirt], where=vw_mask)
+        self.v[self.ntotal:self.ntotal+self.nvirt, 1] = np.divide(self.v[self.ntotal:self.ntotal+self.nvirt, 1], vw[self.ntotal:self.ntotal+self.nvirt], where=vw_mask)
+        self.sigma[self.ntotal:self.ntotal+self.nvirt, 0] = np.divide(self.sigma[self.ntotal:self.ntotal+self.nvirt, 0], vw[self.ntotal:self.ntotal+self.nvirt], where=vw_mask)
+        self.sigma[self.ntotal:self.ntotal+self.nvirt, 1] = np.divide(self.sigma[self.ntotal:self.ntotal+self.nvirt, 1], vw[self.ntotal:self.ntotal+self.nvirt], where=vw_mask)
+        self.sigma[self.ntotal:self.ntotal+self.nvirt, 2] = np.divide(self.sigma[self.ntotal:self.ntotal+self.nvirt, 2], vw[self.ntotal:self.ntotal+self.nvirt], where=vw_mask)
+        self.sigma[self.ntotal:self.ntotal+self.nvirt, 3] = np.divide(self.sigma[self.ntotal:self.ntotal+self.nvirt, 3], vw[self.ntotal:self.ntotal+self.nvirt], where=vw_mask)
+        self.rho[self.ntotal:self.ntotal+self.nvirt] = np.divide(self.rho[self.ntotal:self.ntotal+self.nvirt], vw[self.ntotal:self.ntotal+self.nvirt], where=vw_mask)
+        self.rho[self.ntotal:self.ntotal+self.nvirt] = np.where(vw_mask, self.rho[self.ntotal:self.ntotal+self.nvirt], self.rho_ini)
 
     # function to perform sweep over all particle pairs
     def pair_sweep(self, 
