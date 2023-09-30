@@ -157,6 +157,7 @@ class particles:
 
         # calculate differential position vector and kernel gradient
         dx = self.x[pair_i, :] - self.x[pair_j, :]
+        dv = self.v[pair_i, :] - self.v[pair_j, :]
         dwdx = np.apply_along_axis(kernel.dwdx, 1, dx)
 
         for k in range(pair_i.shape[0]):
@@ -164,8 +165,7 @@ class particles:
             j = pair_j[k]
 
             # update acceleration with artificial viscosity
-            dv = self.v[i, :] - self.v[j, :]
-            vr = np.dot(dv[:], dx[k, :])
+            vr = np.dot(dv[k, :], dx[k, :])
             if vr > 0.: vr = 0.
             rr = np.dot(dx[k, :], dx[k, :])
             muv = self.h*vr/(rr + self.h*self.h*0.01)
@@ -186,17 +186,17 @@ class particles:
             dvdt[i, 1] += h
             dvdt[j, 1] -= h
 
-            tmp_drhodt = self.mass*np.dot(self.v[i,:]-self.v[j,:], dwdx[k, :])
+            tmp_drhodt = self.mass*np.dot(dv[k, :], dwdx[k, :])
             drhodt[i] += tmp_drhodt
             drhodt[j] += tmp_drhodt
 
             # calculating engineering strain rates
             he = np.zeros(4, dtype=np.float64)
-            he[0] = -dv[0]*dwdx[k, 0]
-            he[1] = -dv[1]*dwdx[k, 1]
+            he[0] = -dv[k, 0]*dwdx[k, 0]
+            he[1] = -dv[k, 1]*dwdx[k, 1]
             #he[2] = 0.
-            he[3] = -0.5*(dv[0]*dwdx[k, 1]+dv[1]*dwdx[k, 0])
-            hrxy = -0.5*(dv[0]*dwdx[k, 1] - dv[1]*dwdx[k, 0])
+            he[3] = -0.5*(dv[k, 0]*dwdx[k, 1]+dv[k, 1]*dwdx[k, 0])
+            hrxy = -0.5*(dv[k, 0]*dwdx[k, 1] - dv[k, 1]*dwdx[k, 0])
 
             dstraindt[i, 0] += self.mass*he[0]/self.rho[j]
             dstraindt[i, 1] += self.mass*he[1]/self.rho[j]
