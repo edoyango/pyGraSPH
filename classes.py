@@ -194,33 +194,24 @@ class particles:
         np.add.at(drhodt, pair_i, drhodt_pairs)
         np.add.at(drhodt, pair_j, drhodt_pairs)
 
-        for k in range(pair_i.shape[0]):
-            i = pair_i[k]
-            j = pair_j[k]
+        # calculating engineering strain rates
+        he = np.zeros((pair_i.shape[0], 4))
+        he[:, 0:2] = -dv[:, 0:2]*dwdx[:, 0:2]
+        he[:, 3] = -0.5*np.einsum("ij,ij->i", dv[:, 0:2], np.fliplr(dwdx[:, 0:2]))
+        he[:, :] *= self.mass
+        hrxy = -self.mass*0.5*(dv[:, 0]*dwdx[:, 1] - dv[:, 1]*dwdx[:, 0])
 
-            # tmp_drhodt = self.mass*np.dot(dv[k, :], dwdx[k, :])
-            # drhodt[i] += tmp_drhodt
-            # drhodt[j] += tmp_drhodt
+        np.add.at(dstraindt[:, 0], pair_i, he[:, 0]/self.rho[pair_j])
+        np.add.at(dstraindt[:, 1], pair_i, he[:, 1]/self.rho[pair_j])
+        #np.add.at(dstraindt[:, 2], pair_i, he[:, 2]/self.rho[pair_j])
+        np.add.at(dstraindt[:, 3], pair_i, he[:, 3]/self.rho[pair_j])
+        np.add.at(dstraindt[:, 0], pair_j, he[:, 0]/self.rho[pair_i])
+        np.add.at(dstraindt[:, 1], pair_j, he[:, 1]/self.rho[pair_i])
+        #np.add.at(dstraindt[:, 2], pair_j, he[:, 2]/self.rho[pair_i])
+        np.add.at(dstraindt[:, 3], pair_j, he[:, 3]/self.rho[pair_i])
 
-            # calculating engineering strain rates
-            he = np.zeros(4, dtype=np.float64)
-            he[0] = -dv[k, 0]*dwdx[k, 0]
-            he[1] = -dv[k, 1]*dwdx[k, 1]
-            #he[2] = 0.
-            he[3] = -0.5*(dv[k, 0]*dwdx[k, 1]+dv[k, 1]*dwdx[k, 0])
-            hrxy = -0.5*(dv[k, 0]*dwdx[k, 1] - dv[k, 1]*dwdx[k, 0])
-
-            dstraindt[i, 0] += self.mass*he[0]/self.rho[j]
-            dstraindt[i, 1] += self.mass*he[1]/self.rho[j]
-            # dstraindt[i, 2] += self.mass*he[2]/self.rho[j]
-            dstraindt[i, 3] += self.mass*he[3]/self.rho[j]
-            rxy[i] += self.mass*hrxy/self.rho[j]
-
-            dstraindt[j, 0] += self.mass*he[0]/self.rho[i]
-            dstraindt[j, 1] += self.mass*he[1]/self.rho[i]
-            # dstraindt[j, 2] += self.mass*he[2]/self.rho[i]
-            dstraindt[j, 3] += self.mass*he[3]/self.rho[i]
-            rxy[j] += self.mass*hrxy/self.rho[i]
+        np.add.at(rxy, pair_i, hrxy/self.rho[pair_j])
+        np.add.at(rxy, pair_j, hrxy/self.rho[pair_i])
 
     # function to save particle data
     def save_data(self, itimestep: int):
