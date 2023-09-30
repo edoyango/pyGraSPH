@@ -188,13 +188,19 @@ class particles:
         np.subtract.at(dvdt[:, 0], pair_j, h[:, 0])
         np.subtract.at(dvdt[:, 1], pair_j, h[:, 1])
 
+        # update density change rate with continuity density
+        drhodt_pairs = self.mass*np.einsum("ij,ij->i", dv, dwdx)
+
+        np.add.at(drhodt, pair_i, drhodt_pairs)
+        np.add.at(drhodt, pair_j, drhodt_pairs)
+
         for k in range(pair_i.shape[0]):
             i = pair_i[k]
             j = pair_j[k]
 
-            tmp_drhodt = self.mass*np.dot(dv[k, :], dwdx[k, :])
-            drhodt[i] += tmp_drhodt
-            drhodt[j] += tmp_drhodt
+            # tmp_drhodt = self.mass*np.dot(dv[k, :], dwdx[k, :])
+            # drhodt[i] += tmp_drhodt
+            # drhodt[j] += tmp_drhodt
 
             # calculating engineering strain rates
             he = np.zeros(4, dtype=np.float64)
