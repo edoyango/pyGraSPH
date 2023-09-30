@@ -107,33 +107,48 @@ class particles:
         self.sigma[self.ntotal:self.ntotal+self.nvirt, :].fill(0.)
         vw = np.zeros(self.ntotal+self.nvirt, dtype=np.float64)
 
+        def update_virti(pair_i, pair_j):
+            if pair_i.shape[0] > 0:
+                r = np.linalg.norm(self.x[pair_i, :] - self.x[pair_j, :], axis=1)
+                w = np.apply_along_axis(kernel.w, 0, r)
+                np.add.at(vw, pair_i, w[:]*self.mass/self.rho[pair_j])
+                np.subtract.at(self.v[:, 0], pair_i, self.mass*self.v[pair_j, 0]/self.rho[pair_j]*w)
+                np.subtract.at(self.v[:, 1], pair_i, self.mass*self.v[pair_j, 1]/self.rho[pair_j]*w)
+                np.add.at(self.rho, pair_i, self.mass*w)
+                np.add.at(self.sigma[:, 0], pair_i, self.sigma[pair_j, 0]*self.mass/self.rho[pair_j]*w)
+                np.add.at(self.sigma[:, 1], pair_i, self.sigma[pair_j, 1]*self.mass/self.rho[pair_j]*w)
+                np.add.at(self.sigma[:, 2], pair_i, self.sigma[pair_j, 2]*self.mass/self.rho[pair_j]*w)
+                np.add.at(self.sigma[:, 3], pair_i, self.sigma[pair_j, 3]*self.mass/self.rho[pair_j]*w)
+
         # sweep over all pairs and update virtual particles' properties
         # only consider real-virtual pairs
-        for k in range(self.pairs.shape[0]):
-            i = self.pairs[k, 0]
-            j = self.pairs[k, 1]
+        nonvirtvirt_mask = np.logical_and(
+            self.type[self.pairs[:, 0]] < 0,
+            self.type[self.pairs[:, 1]] > 0
+        )
+        pair_i = self.pairs[nonvirtvirt_mask, 0]
+        pair_j = self.pairs[nonvirtvirt_mask, 1]
 
-            if self.type[i] < 0 and self.type[j] > 0:
-                w = kernel.w(np.linalg.norm(self.x[i, :]-self.x[j,:]))
-                vw[i] += w*self.mass/self.rho[j]
-                self.v[i, :] -= self.v[j, :]*self.mass/self.rho[j]*w
-                self.rho[i] += self.mass*w
-                self.sigma[i, :] += self.sigma[j, :]*self.mass/self.rho[j]*w
-            elif self.type[i] > 0 and self.type[j] < 0:
-                w = kernel.w(np.linalg.norm(self.x[i, :]-self.x[j,:]))
-                vw[j] += w*self.mass/self.rho[i]
-                self.v[j, :] -= self.v[i, :]*self.mass/self.rho[i]*w
-                self.rho[j] += self.mass*w
-                self.sigma[j, :] += self.sigma[i, :]*self.mass/self.rho[i]*w
+        update_virti(pair_i, pair_j)
+
+        nonvirtvirt_mask = np.logical_and(
+            self.type[self.pairs[:, 0]] > 0,
+            self.type[self.pairs[:, 1]] < 0
+        )
+        pair_i = self.pairs[nonvirtvirt_mask, 0]
+        pair_j = self.pairs[nonvirtvirt_mask, 1]
+
+        update_virti(pair_j, pair_i)
 
         # normalize virtual particle properties with summed kernels
-        for i in range(self.ntotal, self.ntotal+self.nvirt):
-            if vw[i] > 0.:
-                self.v[i, :] /= vw[i]
-                self.rho[i] /= vw[i]
-                self.sigma[i, :] /= vw[i]
-            else:
-                self.rho[i] = self.rho_ini
+        self.v[self.ntotal:self.ntotal+self.nvirt, 0] = np.divide(self.v[self.ntotal:self.ntotal+self.nvirt, 0], vw[self.ntotal:self.ntotal+self.nvirt], where=(vw[self.ntotal:self.ntotal+self.nvirt]>0.) )
+        self.v[self.ntotal:self.ntotal+self.nvirt, 1] = np.divide(self.v[self.ntotal:self.ntotal+self.nvirt, 1], vw[self.ntotal:self.ntotal+self.nvirt], where=(vw[self.ntotal:self.ntotal+self.nvirt]>0.) )
+        self.sigma[self.ntotal:self.ntotal+self.nvirt, 0] = np.divide(self.sigma[self.ntotal:self.ntotal+self.nvirt, 0], vw[self.ntotal:self.ntotal+self.nvirt], where=(vw[self.ntotal:self.ntotal+self.nvirt]>0.) )
+        self.sigma[self.ntotal:self.ntotal+self.nvirt, 1] = np.divide(self.sigma[self.ntotal:self.ntotal+self.nvirt, 1], vw[self.ntotal:self.ntotal+self.nvirt], where=(vw[self.ntotal:self.ntotal+self.nvirt]>0.) )
+        self.sigma[self.ntotal:self.ntotal+self.nvirt, 2] = np.divide(self.sigma[self.ntotal:self.ntotal+self.nvirt, 2], vw[self.ntotal:self.ntotal+self.nvirt], where=(vw[self.ntotal:self.ntotal+self.nvirt]>0.) )
+        self.sigma[self.ntotal:self.ntotal+self.nvirt, 3] = np.divide(self.sigma[self.ntotal:self.ntotal+self.nvirt, 3], vw[self.ntotal:self.ntotal+self.nvirt], where=(vw[self.ntotal:self.ntotal+self.nvirt]>0.) )
+        self.rho[self.ntotal:self.ntotal+self.nvirt] = np.divide(self.rho[self.ntotal:self.ntotal+self.nvirt], vw[self.ntotal:self.ntotal+self.nvirt], where=(vw[self.ntotal:self.ntotal+self.nvirt]>0.) )
+        self.rho[self.ntotal:self.ntotal+self.nvirt] = np.where((vw[self.ntotal:self.ntotal+self.nvirt]>0.), self.rho[self.ntotal:self.ntotal+self.nvirt], self.rho_ini)
 
     # function to perform sweep over all particle pairs
     def pair_sweep(self, 
@@ -149,8 +164,8 @@ class particles:
         # sweep over all pairs to update real particles' material rates --------
         # trim pairs to only consider real-real or real-virtual
         nonvirtvirt_mask = np.logical_or(
-            self.pairs[:, 0] > 0,
-            self.pairs[:, 1] > 0
+            self.type[self.pairs[:, 0]] > 0,
+            self.type[self.pairs[:, 1]] > 0
         )
         pair_i = self.pairs[nonvirtvirt_mask, 0]
         pair_j = self.pairs[nonvirtvirt_mask, 1]
@@ -158,7 +173,6 @@ class particles:
         # calculate differential position vector and kernel gradient
         dx = self.x[pair_i, :] - self.x[pair_j, :]
         dv = self.v[pair_i, :] - self.v[pair_j, :]
-        # dwdx = np.apply_along_axis(kernel.dwdx, 1, dx)
         dwdx = kernel.dwdx(dx)
 
         # update acceleration with artificial viscosity
