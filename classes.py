@@ -50,7 +50,6 @@ class particles:
         dsig[:, 3] += sigma0[0:self.ntotal, 0]*drxy[0:self.ntotal] - sigma0[0:self.ntotal, 1]*drxy[0:self.ntotal]
 
         # update stress state
-        # self.sigma[i, :] = sigma0[:] + dsig[:]
         self.sigma[0:self.ntotal] = sigma0[0:self.ntotal, :] + dsig[:, :]
 
         # define identity and D2 matrisices (Voigt notation)
