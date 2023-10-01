@@ -117,14 +117,16 @@ class particles:
             where=np.repeat(f_mask[:, np.newaxis], 4, 1)
         )
 
-        for i in range(ntotal):
-
-            # tensile cracking check 2:
-            # corrected stress state is outside yield surface
-            I1[i] = sigma[i, 0] + sigma[i, 1] + sigma[i, 2]
-            if I1[i] > k_c/alpha_phi:
-                sigma[i, 0:3] = k_c/alpha_phi/3
-                sigma[i, 3] = 0.
+        ## tensile cracking check 2:
+        # corrected stress state is outside yield surface
+        I1 = np.sum(sigma[0:ntotal, 0:3], axis=1)
+        tensile_crack_check2_mask = I1 > k_c/alpha_phi
+        sigma[0:ntotal, 0:3] = np.where(
+            np.repeat(tensile_crack_check2_mask[:, np.newaxis], 3, 1),
+            k_c/alpha_phi/3, 
+            sigma[0:ntotal, 0:3]
+        )
+        sigma[0:ntotal, 3] = np.where(tensile_crack_check2_mask, 0., sigma[0:ntotal, 3])
 
         # simple fluid equation of state.
         # for i in range(self.ntotal+self.nvirt):
