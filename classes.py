@@ -84,20 +84,29 @@ class particles:
             sigma[0:ntotal, 0:3]
         )
         sigma[0:ntotal, 3] = np.where(tensile_crack_check1_mask, 0., sigma[0:ntotal, 3])
-        
+
         # calculate yield function
         f = alpha_phi*I1 + npsqrt(J2) - k_c
+
+        f_mask = f > 0.
+        
+        # normalize deviatoric stress tensor by its frobenius norm/2.
+        shat = np.divide(
+            s, 
+            np.repeat(2.*npsqrt(J2)[:, np.newaxis], 4, 1), 
+            where=np.repeat(f_mask[:, np.newaxis], 4, 1)
+        )
+        dfdsig = alpha_phi*Ide[:] + shat
+        dgdsig = alpha_psi*Ide[:] + shat
 
         for i in range(ntotal):
 
             # Perform corrector step
             if f[i] > 0.:
-                dfdsig = alpha_phi*Ide[:] + s[i, :]/(2.*npsqrt(J2[i]))
-                dgdsig = alpha_psi*Ide[:] + s[i, :]/(2.*npsqrt(J2[i]))
 
-                dlambda = f[i]/(npdot(dfdsig[:], D2[:]*npmatmul(DE[:, :], dgdsig[:])))
+                dlambda = f[i]/(npdot(dfdsig[i, :], D2[:]*npmatmul(DE[:, :], dgdsig[i, :])))
 
-                sigma[i, :] -= npmatmul(DE[:, :], dlambda*dgdsig[:])
+                sigma[i, :] -= npmatmul(DE[:, :], dlambda*dgdsig[i, :])
 
             # tensile cracking check 2:
             # corrected stress state is outside yield surface
