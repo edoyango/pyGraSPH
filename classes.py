@@ -44,7 +44,7 @@ class particles:
     # stress update function (DP model)
     def stress_update(self, dstrain: np.ndarray, drxy: np.ndarray, sigma0: np.ndarray):
 
-        # cache some values
+        # cache some references
         DE = self.customvals['DE'][:, :]
         k_c = self.customvals['k_c']
         alpha_phi = self.customvals['alpha_phi']
@@ -62,7 +62,7 @@ class particles:
         dsig[:, 3] += sigma0[0:ntotal, 0]*drxy[0:ntotal] - sigma0[0:ntotal, 1]*drxy[0:ntotal]
 
         # update stress state
-        self.sigma[0:ntotal] = sigma0[0:ntotal, :] + dsig[:, :]
+        sigma[0:ntotal] = sigma0[0:ntotal, :] + dsig[:, :]
 
         # define identity and D2 matrisices (Voigt notation)
         Ide = np.ascontiguousarray([1, 1, 1, 0])
@@ -149,31 +149,40 @@ class particles:
 
     def update_virtualparticle_properties(self, kernel: typing.Type):
 
+        # cache some references
+        ntotal = self.ntotal
+        nvirt = self.nvirt
+        x = self.x
+        v = self.v
+        sigma = self.sigma
+        rho = self.rho
+        type = self.type
+
         # zeroing virutal particles' properties
-        self.v[self.ntotal:self.ntotal+self.nvirt, :].fill(0.)
-        self.rho[self.ntotal:self.ntotal+self.nvirt].fill(0.)
-        self.sigma[self.ntotal:self.ntotal+self.nvirt, :].fill(0.)
-        vw = np.zeros(self.ntotal+self.nvirt, dtype=np.float64)
+        v[ntotal:ntotal+nvirt, :].fill(0.)
+        rho[ntotal:ntotal+nvirt].fill(0.)
+        sigma[ntotal:ntotal+nvirt, :].fill(0.)
+        vw = np.zeros(ntotal+nvirt, dtype=np.float64)
 
         def update_virti(pair_i, pair_j):
             if pair_i.shape[0] > 0:
-                r = np.linalg.norm(self.x[pair_i, :] - self.x[pair_j, :], axis=1)
+                r = np.linalg.norm(x[pair_i, :] - x[pair_j, :], axis=1)
                 w = np.apply_along_axis(kernel.w, 0, r)
-                dvol = self.mass/self.rho[pair_j]
+                dvol = self.mass/rho[pair_j]
                 np.add.at(vw, pair_i, w[:]*dvol[:])
-                np.subtract.at(self.v[:, 0], pair_i, self.v[pair_j, 0]*w*dvol[:])
-                np.subtract.at(self.v[:, 1], pair_i, self.v[pair_j, 1]*w*dvol[:])
-                np.add.at(self.rho, pair_i, self.mass*w)
-                np.add.at(self.sigma[:, 0], pair_i, self.sigma[pair_j, 0]*w*dvol[:])
-                np.add.at(self.sigma[:, 1], pair_i, self.sigma[pair_j, 1]*w*dvol[:])
-                np.add.at(self.sigma[:, 2], pair_i, self.sigma[pair_j, 2]*w*dvol[:])
-                np.add.at(self.sigma[:, 3], pair_i, self.sigma[pair_j, 3]*w*dvol[:])
+                np.subtract.at(v[:, 0], pair_i, v[pair_j, 0]*w*dvol[:])
+                np.subtract.at(v[:, 1], pair_i, v[pair_j, 1]*w*dvol[:])
+                np.add.at(rho, pair_i, self.mass*w)
+                np.add.at(sigma[:, 0], pair_i, sigma[pair_j, 0]*w*dvol[:])
+                np.add.at(sigma[:, 1], pair_i, sigma[pair_j, 1]*w*dvol[:])
+                np.add.at(sigma[:, 2], pair_i, sigma[pair_j, 2]*w*dvol[:])
+                np.add.at(sigma[:, 3], pair_i, sigma[pair_j, 3]*w*dvol[:])
 
         # sweep over all pairs and update virtual particles' properties
         # only consider real-virtual pairs
         nonvirtvirt_mask = np.logical_and(
-            self.type[self.pair_i] < 0,
-            self.type[self.pair_j] > 0
+            type[self.pair_i] < 0,
+            type[self.pair_j] > 0
         )
         pair_i = self.pair_i[nonvirtvirt_mask]
         pair_j = self.pair_j[nonvirtvirt_mask]
@@ -181,8 +190,8 @@ class particles:
         update_virti(pair_i, pair_j)
 
         nonvirtvirt_mask = np.logical_and(
-            self.type[self.pair_i] > 0,
-            self.type[self.pair_j] < 0
+            type[self.pair_i] > 0,
+            type[self.pair_j] < 0
         )
         pair_i = self.pair_i[nonvirtvirt_mask]
         pair_j = self.pair_j[nonvirtvirt_mask]
@@ -190,15 +199,15 @@ class particles:
         update_virti(pair_j, pair_i)
 
         # normalize virtual particle properties with summed kernels
-        vw_mask = vw[self.ntotal:self.ntotal+self.nvirt]>0.
-        self.v[self.ntotal:self.ntotal+self.nvirt, 0] = np.divide(self.v[self.ntotal:self.ntotal+self.nvirt, 0], vw[self.ntotal:self.ntotal+self.nvirt], where=vw_mask)
-        self.v[self.ntotal:self.ntotal+self.nvirt, 1] = np.divide(self.v[self.ntotal:self.ntotal+self.nvirt, 1], vw[self.ntotal:self.ntotal+self.nvirt], where=vw_mask)
-        self.sigma[self.ntotal:self.ntotal+self.nvirt, 0] = np.divide(self.sigma[self.ntotal:self.ntotal+self.nvirt, 0], vw[self.ntotal:self.ntotal+self.nvirt], where=vw_mask)
-        self.sigma[self.ntotal:self.ntotal+self.nvirt, 1] = np.divide(self.sigma[self.ntotal:self.ntotal+self.nvirt, 1], vw[self.ntotal:self.ntotal+self.nvirt], where=vw_mask)
-        self.sigma[self.ntotal:self.ntotal+self.nvirt, 2] = np.divide(self.sigma[self.ntotal:self.ntotal+self.nvirt, 2], vw[self.ntotal:self.ntotal+self.nvirt], where=vw_mask)
-        self.sigma[self.ntotal:self.ntotal+self.nvirt, 3] = np.divide(self.sigma[self.ntotal:self.ntotal+self.nvirt, 3], vw[self.ntotal:self.ntotal+self.nvirt], where=vw_mask)
-        self.rho[self.ntotal:self.ntotal+self.nvirt] = np.divide(self.rho[self.ntotal:self.ntotal+self.nvirt], vw[self.ntotal:self.ntotal+self.nvirt], where=vw_mask)
-        self.rho[self.ntotal:self.ntotal+self.nvirt] = np.where(vw_mask, self.rho[self.ntotal:self.ntotal+self.nvirt], self.rho_ini)
+        vw_mask = vw[ntotal:ntotal+nvirt]>0.
+        v[ntotal:ntotal+nvirt, 0] = np.divide(v[ntotal:ntotal+nvirt, 0], vw[ntotal:ntotal+nvirt], where=vw_mask)
+        v[ntotal:ntotal+nvirt, 1] = np.divide(v[ntotal:ntotal+nvirt, 1], vw[ntotal:ntotal+nvirt], where=vw_mask)
+        sigma[ntotal:ntotal+nvirt, 0] = np.divide(sigma[ntotal:ntotal+nvirt, 0], vw[ntotal:ntotal+nvirt], where=vw_mask)
+        sigma[ntotal:ntotal+nvirt, 1] = np.divide(sigma[ntotal:ntotal+nvirt, 1], vw[ntotal:ntotal+nvirt], where=vw_mask)
+        sigma[ntotal:ntotal+nvirt, 2] = np.divide(sigma[ntotal:ntotal+nvirt, 2], vw[ntotal:ntotal+nvirt], where=vw_mask)
+        sigma[ntotal:ntotal+nvirt, 3] = np.divide(sigma[ntotal:ntotal+nvirt, 3], vw[ntotal:ntotal+nvirt], where=vw_mask)
+        rho[ntotal:ntotal+nvirt] = np.divide(rho[ntotal:ntotal+nvirt], vw[ntotal:ntotal+nvirt], where=vw_mask)
+        rho[ntotal:ntotal+nvirt] = np.where(vw_mask, rho[ntotal:ntotal+nvirt], self.rho_ini)
 
     # function to perform sweep over all particle pairs
     def pair_sweep(self, 
@@ -212,22 +221,31 @@ class particles:
         self.update_virtualparticle_properties(kernel)
 
         # sweep over all pairs to update real particles' material rates --------
+
+        # cache some references
         pair_i = self.pair_i
         pair_j = self.pair_j
+        ntotal = self.ntotal
+        nvirt = self.nvirt
+        x = self.x
+        v = self.v
+        rho = self.rho
+        sigma = self.sigma
+        h = self.h; c = self.c; mass = self.mass
 
         # calculate differential position vector and kernel gradient
-        dx = self.x[pair_i, :] - self.x[pair_j, :]
-        dv = self.v[pair_i, :] - self.v[pair_j, :]
+        dx = x[pair_i, :] - x[pair_j, :]
+        dv = v[pair_i, :] - v[pair_j, :]
         dwdx = kernel.dwdx(dx)
 
         # update acceleration with artificial viscosity
         vr = np.einsum("ij,ij->i", dv, dx)
         vr = np.where(vr > 0, 0., vr)
         rr = np.einsum("ij,ij->i", dx, dx)
-        muv = self.h*vr[:]/(rr[:] + self.h*self.h*0.01)
-        mrho = 0.5*(self.rho[pair_i]+self.rho[pair_j])
+        muv = h*vr[:]/(rr[:] + h*h*0.01)
+        mrho = 0.5*(rho[pair_i]+rho[pair_j])
         piv = -np.einsum("i,ij->ij", 
-            self.mass*0.2*(muv[:]-self.c)*muv[:]/mrho[:],
+            mass*0.2*(muv[:]-c)*muv[:]/mrho[:],
             dwdx)
 
         np.add.at(dvdt[:, 0], pair_i, piv[:, 0])
@@ -237,11 +255,11 @@ class particles:
 
         # update acceleration with div stress
         # using momentum consertive form
-        sigma_rho2 = np.einsum("ij,i->ij", self.sigma, 1./self.rho**2)
+        sigma_rho2 = sigma[0:ntotal+nvirt, :] / (rho[0:ntotal+nvirt, np.newaxis]**2)
         sigma_rho2_pairs = sigma_rho2[pair_i, :]+sigma_rho2[pair_j, :]
         h = sigma_rho2_pairs[:, 0:2] * dwdx[:, 0:2]
         h += np.einsum("i,ij->ij", sigma_rho2_pairs[:, 3], np.fliplr(dwdx[:, 0:2]))
-        h *= self.mass
+        h *= mass
 
         np.add.at(dvdt[:, 0], pair_i, h[:, 0])
         np.add.at(dvdt[:, 1], pair_i, h[:, 1])
@@ -249,7 +267,7 @@ class particles:
         np.subtract.at(dvdt[:, 1], pair_j, h[:, 1])
 
         # update density change rate with continuity density
-        drhodt_pairs = self.mass*np.einsum("ij,ij->i", dv, dwdx)
+        drhodt_pairs = mass*np.einsum("ij,ij->i", dv, dwdx)
 
         np.add.at(drhodt, pair_i, drhodt_pairs)
         np.add.at(drhodt, pair_j, drhodt_pairs)
@@ -258,20 +276,20 @@ class particles:
         he = np.zeros((pair_i.shape[0], 4))
         he[:, 0:2] = -dv[:, 0:2]*dwdx[:, 0:2]
         he[:, 3] = -0.5*np.einsum("ij,ij->i", dv[:, 0:2], np.fliplr(dwdx[:, 0:2]))
-        he[:, :] *= self.mass
-        hrxy = -self.mass*0.5*(dv[:, 0]*dwdx[:, 1] - dv[:, 1]*dwdx[:, 0])
+        he[:, :] *= mass
+        hrxy = -mass*0.5*(dv[:, 0]*dwdx[:, 1] - dv[:, 1]*dwdx[:, 0])
 
-        np.add.at(dstraindt[:, 0], pair_i, he[:, 0]/self.rho[pair_j])
-        np.add.at(dstraindt[:, 1], pair_i, he[:, 1]/self.rho[pair_j])
-        #np.add.at(dstraindt[:, 2], pair_i, he[:, 2]/self.rho[pair_j])
-        np.add.at(dstraindt[:, 3], pair_i, he[:, 3]/self.rho[pair_j])
-        np.add.at(dstraindt[:, 0], pair_j, he[:, 0]/self.rho[pair_i])
-        np.add.at(dstraindt[:, 1], pair_j, he[:, 1]/self.rho[pair_i])
-        #np.add.at(dstraindt[:, 2], pair_j, he[:, 2]/self.rho[pair_i])
-        np.add.at(dstraindt[:, 3], pair_j, he[:, 3]/self.rho[pair_i])
+        np.add.at(dstraindt[:, 0], pair_i, he[:, 0]/rho[pair_j])
+        np.add.at(dstraindt[:, 1], pair_i, he[:, 1]/rho[pair_j])
+        #np.add.at(dstraindt[:, 2], pair_i, he[:, 2]/rho[pair_j])
+        np.add.at(dstraindt[:, 3], pair_i, he[:, 3]/rho[pair_j])
+        np.add.at(dstraindt[:, 0], pair_j, he[:, 0]/rho[pair_i])
+        np.add.at(dstraindt[:, 1], pair_j, he[:, 1]/rho[pair_i])
+        #np.add.at(dstraindt[:, 2], pair_j, he[:, 2]/rho[pair_i])
+        np.add.at(dstraindt[:, 3], pair_j, he[:, 3]/rho[pair_i])
 
-        np.add.at(rxy, pair_i, hrxy/self.rho[pair_j])
-        np.add.at(rxy, pair_j, hrxy/self.rho[pair_i])
+        np.add.at(rxy, pair_i, hrxy/rho[pair_j])
+        np.add.at(rxy, pair_j, hrxy/rho[pair_i])
 
     # function to save particle data
     def save_data(self, itimestep: int):
