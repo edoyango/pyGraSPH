@@ -68,30 +68,32 @@ class particles:
         Ide = np.ascontiguousarray([1, 1, 1, 0])
         D2 = np.ascontiguousarray([1, 1, 1, 2])
 
-        s = np.zeros(4)
+        I1 = np.sum(sigma[0:ntotal, 0:3], axis=1)
+        s = sigma[0:ntotal, :] - np.outer(I1[:], Ide[:]/3.)
+        J2 = 0.5*np.sum(s*s*D2, axis=1)
 
         for i in range(ntotal):
 
             # stress invariants
-            I1 = sigma[i, 0] + sigma[i, 1] + sigma[i, 2]
-            s[0:3] = sigma[i, 0:3] - I1/3.
-            s[3] = sigma[i, 3]
-            J2 = 0.5*npdot(s[:], D2[:]*s[:])
+            # I1 = sigma[i, 0] + sigma[i, 1] + sigma[i, 2]
+            # s[i,0:3] = sigma[i, 0:3] - I1[i]/3.
+            # s[3] = sigma[i, 3]
+            # J2 = 0.5*npdot(s[i, :], D2[:]*s[i, :])
 
             # tensile cracking check 1: 
             # J2 is zero but I1 is beyond apex of yield surface
-            if J2 == 0 and I1 > k_c:
-                I1 = k_c
-                sigma[i, 0:3] = I1/3.
+            if J2[i] == 0 and I1[i] > k_c:
+                I1[i] = k_c
+                sigma[i, 0:3] = I1[i]/3.
                 sigma[i, 3] = 0.
 
             # calculate yield function
-            f = alpha_phi*I1 + npsqrt(J2) - k_c
+            f = alpha_phi*I1[i] + npsqrt(J2[i]) - k_c
 
             # Perform corrector step
             if f > 0.:
-                dfdsig = alpha_phi*Ide[:] + s[:]/(2.*npsqrt(J2))
-                dgdsig = alpha_psi*Ide[:] + s[:]/(2.*npsqrt(J2))
+                dfdsig = alpha_phi*Ide[:] + s[i, :]/(2.*npsqrt(J2[i]))
+                dgdsig = alpha_psi*Ide[:] + s[i, :]/(2.*npsqrt(J2[i]))
 
                 dlambda = f/(npdot(dfdsig[:], D2[:]*npmatmul(DE[:, :], dgdsig[:])))
 
@@ -99,8 +101,8 @@ class particles:
 
             # tensile cracking check 2:
             # corrected stress state is outside yield surface
-            I1 = sigma[i, 0] + sigma[i, 1] + sigma[i, 2]
-            if I1 > k_c/alpha_phi:
+            I1[i] = sigma[i, 0] + sigma[i, 1] + sigma[i, 2]
+            if I1[i] > k_c/alpha_phi:
                 sigma[i, 0:3] = k_c/alpha_phi/3
                 sigma[i, 3] = 0.
 
