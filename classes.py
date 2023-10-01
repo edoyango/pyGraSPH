@@ -88,25 +88,36 @@ class particles:
         # calculate yield function
         f = alpha_phi*I1 + npsqrt(J2) - k_c
 
+        ## Start performing corrector step.
+        # Calculate mask where stress state is outside yield surface
         f_mask = f > 0.
         
-        # normalize deviatoric stress tensor by its frobenius norm/2.
+        # normalize deviatoric stress tensor by its frobenius norm/2 (only for pts with f > 0)
         shat = np.divide(
             s, 
             np.repeat(2.*npsqrt(J2)[:, np.newaxis], 4, 1), 
             where=np.repeat(f_mask[:, np.newaxis], 4, 1)
         )
+        # update yield potential and plastic potential matrices with normalized deviatoric stress tensor
         dfdsig = alpha_phi*Ide[:] + shat
         dgdsig = alpha_psi*Ide[:] + shat
 
+        # calculate plastic multipler
+        dlambda = np.divide(
+            f,
+            np.sum(dfdsig * (D2[:]*npmatmul(dgdsig[:, :], DE[:, :])), axis=1),
+            where=f_mask
+        )
+
+        # Apply plastic corrector stress
+        np.subtract(
+            sigma[0:ntotal, :], 
+            npmatmul(dlambda[:, np.newaxis]*dgdsig[:, :], DE[:, :]), 
+            out=sigma[0:ntotal, :],
+            where=np.repeat(f_mask[:, np.newaxis], 4, 1)
+        )
+
         for i in range(ntotal):
-
-            # Perform corrector step
-            if f[i] > 0.:
-
-                dlambda = f[i]/(npdot(dfdsig[i, :], D2[:]*npmatmul(DE[:, :], dgdsig[i, :])))
-
-                sigma[i, :] -= npmatmul(DE[:, :], dlambda*dgdsig[i, :])
 
             # tensile cracking check 2:
             # corrected stress state is outside yield surface
