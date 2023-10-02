@@ -7,8 +7,12 @@ A Python, and super basic, version of GraSPH. Early stages of development. Only 
 Package requirements:
 
 ```bash
-pip/conda/mamba install scipy h5py
+pip/conda/mamba install scipy h5py 'numpy>=1.25'
 ```
+
+I recommend using NumPy version at least 1.25 as performance improvements are introduced which
+improve speed of this code by 4x. See [NumPy Release Notes](https://numpy.org/doc/stable/release/1.25.0-notes.html#numpy-1-25-0-release-notes),
+where the improvements to `np.ufunc.at` and `np.einsum` are most relevant.
 
 ## Run
 
