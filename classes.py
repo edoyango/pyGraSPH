@@ -71,7 +71,7 @@ class particles:
         # stress invariants
         I1 = np.sum(sigma[0:ntotal, 0:3], axis=1)
         s = sigma[0:ntotal, :] - np.outer(I1[:], Ide[:]/3.)
-        J2 = 0.5*np.sum(s*s*D2, axis=1)
+        J2 = 0.5*np.einsum("ij,ij->i", s, s*D2)
 
         # tensile cracking check 1: 
         # J2 is zero but I1 is beyond apex of yield surface
@@ -105,7 +105,7 @@ class particles:
         # calculate plastic multipler
         dlambda = np.divide(
             f,
-            np.sum(dfdsig * (D2[:]*npmatmul(dgdsig[:, :], DE[:, :])), axis=1),
+            np.einsum("ij,ij->i", dfdsig, (D2[:]*npmatmul(dgdsig[:, :], DE[:, :]))),
             where=f_mask
         )
 

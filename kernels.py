@@ -12,4 +12,4 @@ class wenland_c2:
         r = np.sqrt(np.einsum("ij,ij->i", dx, dx))
         q = r/self.h
         dwdx_coeff = -self.alpha*10.*q[:]*np.maximum(0., 2.-q[:])**3/(r[:]*self.h)
-        return np.einsum("i,ij->ij", dwdx_coeff, dx)
+        return dwdx_coeff[:, np.newaxis]*dx
