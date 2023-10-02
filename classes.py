@@ -52,7 +52,6 @@ class particles:
         sigma = self.sigma # this stores reference, not the data.
         ntotal = self.ntotal
 
-        npdot = np.dot
         npmatmul = np.matmul
         npsqrt = np.sqrt
 
@@ -145,6 +144,8 @@ class particles:
             self.type[pairs[:, 0]] > 0,
             self.type[pairs[:, 1]] > 0
         )
+
+        # organise pairs into seperate arrays for better use with np.ufunc.at
         self.pair_i, self.pair_j = pairs[nonvirtvirt_mask, 0], pairs[nonvirtvirt_mask, 1]
 
     def update_virtualparticle_properties(self, kernel: typing.Type):
@@ -164,6 +165,7 @@ class particles:
         sigma[ntotal:ntotal+nvirt, :].fill(0.)
         vw = np.zeros(ntotal+nvirt, dtype=np.float64)
 
+        # define function to update virtual particles' properties
         def update_virti(pair_i, pair_j):
             if pair_i.shape[0] > 0:
                 r = np.linalg.norm(x[pair_i, :] - x[pair_j, :], axis=1)
@@ -180,6 +182,7 @@ class particles:
 
         # sweep over all pairs and update virtual particles' properties
         # only consider real-virtual pairs
+        # i particles are virtual
         nonvirtvirt_mask = np.logical_and(
             type[self.pair_i] < 0,
             type[self.pair_j] > 0
@@ -189,6 +192,7 @@ class particles:
 
         update_virti(pair_i, pair_j)
 
+        # j particles are virtual
         nonvirtvirt_mask = np.logical_and(
             type[self.pair_i] > 0,
             type[self.pair_j] < 0
@@ -216,11 +220,6 @@ class particles:
                    dstraindt: np.ndarray, 
                    rxy: np.ndarray,
                    kernel: typing.Type):
-        
-        ## update virtual particles' properties first --------------------------
-        self.update_virtualparticle_properties(kernel)
-
-        # sweep over all pairs to update real particles' material rates --------
 
         # cache some references
         pair_i = self.pair_i
@@ -233,11 +232,15 @@ class particles:
         sigma = self.sigma
         h = self.h; c = self.c; mass = self.mass
 
-        # calculate differential position vector and kernel gradient
+        ## calculate differential position vector and kernel gradient first ----
         dx = x[pair_i, :] - x[pair_j, :]
         dv = v[pair_i, :] - v[pair_j, :]
         dwdx = kernel.dwdx(dx)
 
+        ## update virtual particles' properties --------------------------------
+        self.update_virtualparticle_properties(kernel)
+
+        ## sweep over all pairs to update real particles' material rates -------
         # update acceleration with artificial viscosity
         vr = np.einsum("ij,ij->i", dv, dx)
         vr = np.where(vr > 0, 0., vr)
