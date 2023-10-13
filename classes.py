@@ -1,5 +1,4 @@
 import numpy as np
-import scipy as sp
 import typing
 import h5py
 from closefriends import query_pairs
