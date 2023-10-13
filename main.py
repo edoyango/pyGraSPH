@@ -84,7 +84,7 @@ if __name__ == '__main__':
     g = [0., -9.81]
     
     # select SPH kernel
-    wc2_kernel = pygrasph.kernels.wenland_c2(k=2, h=pts.dx*1.5)
+    wc2_kernel = pygrasph.kernels.wendland_c2(k=2, h=pts.dx*1.5)
     
     # initialize integrators class
     itgs = pygrasph.integrators(f=g, kernel=wc2_kernel)
