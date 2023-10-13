@@ -1,0 +1,28 @@
+[project]
+name = "PyGraSPH"
+version = "0.0.1"
+dependencies = [
+    "git+https://github.com/edoyango/closefriends.git",
+    "numpy >= 1.25",
+    "h5py"
+]
+[tool.poetry]
+name = "pygrasph"
+version = "0.0.1"
+description = "A minimal package to run and learn about bash SPH simulations for granular materials."
+authors = ["Edward <edward_yang_125@hotmail.com>"]
+license = "MIT"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+closefriends = {git = "https://github.com/edoyango/closefriends.git"}
+numpy = ">=1.25"
+h5py = ">=3.9.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.4.2"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
