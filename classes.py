@@ -424,41 +424,32 @@ class integrators:
 
             # k1 ---------------------------------------------------------------
             
-            # perform sweep of pairs
+            # perform first sweep of pairs (k1)
             pts.pair_sweep(dvdt[0, :, :], drhodt[0, :], dstraindt[0, :, :], rxy[0, :], self.kernel)
 
-            # k2 ---------------------------------------------------------------
+            # perform 2nd - 4th RK4 iteration
+            for k in range(1, 4):
 
-            # update properties to half timestep
-            np.add(pts.rho0[0:pts.ntotal+pts.nvirt], dt/RK4_weights[1]*drhodt[0, 0:pts.ntotal+pts.nvirt], where=realmask, out=pts.rho[0:pts.ntotal+pts.nvirt])
-            np.add(pts.v0[0:pts.ntotal+pts.nvirt, :], dt/RK4_weights[1]*dvdt[0, 0:pts.ntotal+pts.nvirt, :], where=realmask[:, np.newaxis], out=pts.v[0:pts.ntotal+pts.nvirt, :])
+                # update properties according to RK4_weights
+                np.add(
+                    pts.rho0[0:pts.ntotal+pts.nvirt], 
+                    dt/RK4_weights[k]*drhodt[k-1, 0:pts.ntotal+pts.nvirt], 
+                    where=realmask, 
+                    out=pts.rho[0:pts.ntotal+pts.nvirt]
+                )
 
-            pts.stress_update(dt/RK4_weights[1]*dstraindt[0, :, :], dt/RK4_weights[1]*rxy[0, :], pts.sigma0)
+                np.add(
+                    pts.v0[0:pts.ntotal+pts.nvirt, :], 
+                    dt/RK4_weights[k]*dvdt[k-1, 0:pts.ntotal+pts.nvirt, :], 
+                    where=realmask[:, np.newaxis], 
+                    out=pts.v[0:pts.ntotal+pts.nvirt, :]
+                )
 
-            # perform sweep of pairs
-            pts.pair_sweep(dvdt[1, :, :], drhodt[1, :], dstraindt[1, :, :], rxy[1, :], self.kernel)
-
-            # k3 ---------------------------------------------------------------
-
-            # update properties to half timestep
-            np.add(pts.rho0[0:pts.ntotal+pts.nvirt], dt/RK4_weights[2]*drhodt[1, 0:pts.ntotal+pts.nvirt], where=realmask, out=pts.rho[0:pts.ntotal+pts.nvirt])
-            np.add(pts.v0[0:pts.ntotal+pts.nvirt, :], dt/RK4_weights[2]*dvdt[1, 0:pts.ntotal+pts.nvirt, :], where=realmask[:, np.newaxis], out=pts.v[0:pts.ntotal+pts.nvirt, :])
-
-            pts.stress_update(dt/RK4_weights[2]*dstraindt[1, :, :], dt/RK4_weights[2]*rxy[1, :], pts.sigma0)
-
-            # perform sweep of pairs
-            pts.pair_sweep(dvdt[2, :, :], drhodt[2, :], dstraindt[2, :, :], rxy[2, :], self.kernel)
-
-            # k4 ---------------------------------------------------------------
-
-            # update properties to half timestep
-            np.add(pts.rho0[0:pts.ntotal+pts.nvirt], dt/RK4_weights[3]*drhodt[2, 0:pts.ntotal+pts.nvirt], where=realmask, out=pts.rho[0:pts.ntotal+pts.nvirt])
-            np.add(pts.v0[0:pts.ntotal+pts.nvirt, :], dt/RK4_weights[3]*dvdt[2, 0:pts.ntotal+pts.nvirt, :], where=realmask[:, np.newaxis], out=pts.v[0:pts.ntotal+pts.nvirt, :])
-
-            pts.stress_update(dt/RK4_weights[3]*dstraindt[2, :, :], dt/RK4_weights[3]*rxy[2, :], pts.sigma0)
-
-            # perform sweep of pairs
-            pts.pair_sweep(dvdt[3, :, :], drhodt[3, :], dstraindt[3, :, :], rxy[3, :], self.kernel)
+                # update stress according to RK4_weights
+                pts.stress_update(dt/RK4_weights[k]*dstraindt[k-1, :, :], dt/RK4_weights[k]*rxy[k-1, :], pts.sigma0)
+                
+                # perform sweep of pairs
+                pts.pair_sweep(dvdt[k, :, :], drhodt[k, :], dstraindt[k, :, :], rxy[k, :], self.kernel)
 
             # final update -----------------------------------------------------
 
