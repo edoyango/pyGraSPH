@@ -51,25 +51,27 @@ class particles:
         alpha_psi = self.customvals['alpha_psi']
         sigma = self.sigma # this stores reference, not the data.
         ntotal = self.ntotal
+        nvirt = self.nvirt
+        realmask = self.type[0:ntotal+nvirt] > 0
 
         npmatmul = np.matmul
         npsqrt = np.sqrt
 
         # elastic predictor stress increment
-        dsig = npmatmul(dstrain[0:ntotal, :], DE[:, :])
+        dsig = npmatmul(dstrain[0:ntotal+nvirt, :], DE[:, :])
         # update stress increment with Jaumann stress-rate
-        dsig[:, 3] += sigma0[0:ntotal, 0]*drxy[0:ntotal] - sigma0[0:ntotal, 1]*drxy[0:ntotal]
+        dsig[:, 3] += sigma0[0:ntotal+nvirt, 0]*drxy[0:ntotal+nvirt] - sigma0[0:ntotal+nvirt, 1]*drxy[0:ntotal+nvirt]
 
         # update stress state
-        sigma[0:ntotal] = sigma0[0:ntotal, :] + dsig[:, :]
+        np.add(sigma0[0:ntotal+nvirt, :], dsig[:, :], out=sigma[0:ntotal+nvirt, :], where=realmask[:, np.newaxis])
 
         # define identity and D2 matrisices (Voigt notation)
         Ide = np.ascontiguousarray([1, 1, 1, 0])
         D2 = np.ascontiguousarray([1, 1, 1, 2])
 
         # stress invariants
-        I1 = np.sum(sigma[0:ntotal, 0:3], axis=1)
-        s = sigma[0:ntotal, :] - np.outer(I1[:], Ide[:]/3.)
+        I1 = np.sum(sigma[0:ntotal+nvirt, 0:3], axis=1)
+        s = sigma[0:ntotal+nvirt, :] - np.outer(I1[:], Ide[:]/3.)
         J2 = 0.5*np.einsum("ij,ij->i", s, s*D2)
 
         # tensile cracking check 1: 
@@ -77,12 +79,12 @@ class particles:
         tensile_crack_check1_mask = np.logical_and(J2==0., I1 > k_c)
 
         I1 = np.where(tensile_crack_check1_mask, k_c, I1)
-        sigma[0:ntotal, 0:3] = np.where(
+        sigma[0:ntotal+nvirt, 0:3] = np.where(
             tensile_crack_check1_mask[:, np.newaxis],
             k_c/3., 
-            sigma[0:ntotal, 0:3]
+            sigma[0:ntotal+nvirt, 0:3]
         )
-        sigma[0:ntotal, 3] = np.where(tensile_crack_check1_mask, 0., sigma[0:ntotal, 3])
+        sigma[0:ntotal+nvirt, 3] = np.where(tensile_crack_check1_mask, 0., sigma[0:ntotal+nvirt, 3])
 
         # calculate yield function
         f = alpha_phi*I1 + npsqrt(J2) - k_c
@@ -96,8 +98,8 @@ class particles:
         np.divide(
             shat,
             2.*npsqrt(J2)[:, np.newaxis], 
+            out=shat,
             where=f_mask[:, np.newaxis],
-            out=shat
         )
 
         # update yield potential and plastic potential matrices with normalized deviatoric stress tensor
@@ -113,22 +115,22 @@ class particles:
 
         # Apply plastic corrector stress
         np.subtract(
-            sigma[0:ntotal, :], 
+            sigma[0:ntotal+nvirt, :], 
             npmatmul(dlambda[:, np.newaxis]*dgdsig[:, :], DE[:, :]), 
-            out=sigma[0:ntotal, :],
+            out=sigma[0:ntotal+nvirt, :],
             where=f_mask[:, np.newaxis]
         )
 
         ## tensile cracking check 2:
         # corrected stress state is outside yield surface
-        I1 = np.sum(sigma[0:ntotal, 0:3], axis=1)
+        I1 = np.sum(sigma[0:ntotal+nvirt, 0:3], axis=1)
         tensile_crack_check2_mask = I1 > k_c/alpha_phi
-        sigma[0:ntotal, 0:3] = np.where(
+        sigma[0:ntotal+nvirt, 0:3] = np.where(
             tensile_crack_check2_mask[:, np.newaxis],
             k_c/alpha_phi/3, 
-            sigma[0:ntotal, 0:3]
+            sigma[0:ntotal+nvirt, 0:3]
         )
-        sigma[0:ntotal, 3] = np.where(tensile_crack_check2_mask, 0., sigma[0:ntotal, 3])
+        sigma[0:ntotal+nvirt, 3] = np.where(tensile_crack_check2_mask, 0., sigma[0:ntotal+nvirt, 3])
 
         # simple fluid equation of state.
         # for i in range(self.ntotal+self.nvirt):
@@ -164,10 +166,12 @@ class particles:
         rho = self.rho
         type = self.type
 
+        virtmask = type[0:ntotal+nvirt] < 0
+
         # zeroing virutal particles' properties
-        v[ntotal:ntotal+nvirt, :].fill(0.)
-        rho[ntotal:ntotal+nvirt].fill(0.)
-        sigma[ntotal:ntotal+nvirt, :].fill(0.)
+        v[0:ntotal+nvirt, :] = np.where(virtmask[:, np.newaxis], 0, v[0:ntotal+nvirt, :])
+        rho[0:ntotal+nvirt] = np.where(virtmask, 0, rho[0:ntotal+nvirt])
+        sigma[0:ntotal+nvirt] = np.where(virtmask[:, np.newaxis], 0, sigma[0:ntotal+nvirt])
         vw = np.zeros(ntotal+nvirt, dtype=np.float64)
 
         # define function to update virtual particles' properties
@@ -208,11 +212,11 @@ class particles:
         update_virti(pair_j, pair_i)
 
         # normalize virtual particle properties with summed kernels
-        vw_mask = vw[ntotal:ntotal+nvirt]>0.
-        np.divide(v[ntotal:ntotal+nvirt, :], vw[ntotal:ntotal+nvirt, np.newaxis], where=vw_mask[:, np.newaxis], out=v[ntotal:ntotal+nvirt, :])
-        np.divide(sigma[ntotal:ntotal+nvirt, :], vw[ntotal:ntotal+nvirt, np.newaxis], where=vw_mask[:, np.newaxis], out=sigma[ntotal:ntotal+nvirt, :])
-        np.divide(rho[ntotal:ntotal+nvirt], vw[ntotal:ntotal+nvirt], where=vw_mask, out=rho[ntotal:ntotal+nvirt])
-        rho[ntotal:ntotal+nvirt] = np.where(vw_mask, rho[ntotal:ntotal+nvirt], self.rho_ini)
+        vw_mask = vw[0:ntotal+nvirt]>0.
+        np.divide(v[0:ntotal+nvirt, :], vw[:, np.newaxis], where=vw_mask[:, np.newaxis], out=v[0:ntotal+nvirt, :])
+        np.divide(sigma[0:ntotal+nvirt, :], vw[:, np.newaxis], where=vw_mask[:, np.newaxis], out=sigma[0:ntotal+nvirt, :])
+        np.divide(rho[0:ntotal+nvirt], vw[:], where=vw_mask[:], out=rho[0:ntotal+nvirt])
+        rho[0:ntotal+nvirt] = np.where(vw_mask, rho[0:ntotal+nvirt], self.rho_ini)
 
     # function to perform sweep over all particle pairs
     def pair_sweep(self, 
@@ -343,14 +347,16 @@ class integrators:
             # find pairs
             pts.findpairs()
 
+            realmask = pts.type[0:pts.ntotal+pts.nvirt] > 0
+
             # save data from start of timestep
             v0 = np.copy(pts.v[0:pts.ntotal+pts.nvirt, :])
             rho0 = np.copy(pts.rho[0:pts.ntotal+pts.nvirt])
             sigma0 = np.copy(pts.sigma[0:pts.ntotal+pts.nvirt, :])
 
             # Update data to mid-timestep
-            pts.rho[0:pts.ntotal] += 0.5*dt*drhodt[0:pts.ntotal]
-            pts.v[0:pts.ntotal, :] += 0.5*dt*dvdt[0:pts.ntotal, :]
+            pts.rho[0:pts.ntotal+pts.nvirt] += 0.5*dt*drhodt[0:pts.ntotal+pts.nvirt]
+            pts.v[0:pts.ntotal+pts.nvirt, :] += 0.5*dt*dvdt[0:pts.ntotal+pts.nvirt, :]
 
             pts.stress_update(0.5*dt*dstraindt, 0.5*dt*rxy, sigma0)
 
@@ -366,10 +372,10 @@ class integrators:
             pts.stress_update(dt*dstraindt, dt*rxy, sigma0)
 
             # update data to full-timestep
-            pts.rho[0:pts.ntotal] = rho0[0:pts.ntotal] + dt*drhodt[0:pts.ntotal]
-            pts.v[0:pts.ntotal, :] = v0[0:pts.ntotal, :] + dt*dvdt[0:pts.ntotal, :]
-            pts.x[0:pts.ntotal, :] += dt*pts.v[0:pts.ntotal, :]
-            pts.strain[0:pts.ntotal, :] += dt*dstraindt[0:pts.ntotal, :]
+            np.add(rho0[0:pts.ntotal+pts.nvirt], dt*drhodt[0:pts.ntotal+pts.nvirt], where=realmask, out=pts.rho[0:pts.ntotal+pts.nvirt])
+            np.add(v0[0:pts.ntotal+pts.nvirt, :], dt*dvdt[0:pts.ntotal+pts.nvirt, :], where=realmask[:, np.newaxis], out=pts.v[0:pts.ntotal+pts.nvirt, :])
+            np.add(pts.x[0:pts.ntotal+pts.nvirt, :], dt*pts.v[0:pts.ntotal+pts.nvirt, :], where=realmask[:, np.newaxis], out=pts.x[0:pts.ntotal+pts.nvirt, :])
+            np.add(pts.strain[0:pts.ntotal+pts.nvirt, :], dt*dstraindt[0:pts.ntotal+pts.nvirt, :], where=realmask[:, np.newaxis], out=pts.strain[0:pts.ntotal+pts.nvirt, :])
 
             # print data to terminal if needed
             if itimestep % self.printtimestep == 0:
