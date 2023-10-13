@@ -14,7 +14,7 @@ class integrators:
            maxtimestep: int, # timestep to run simulation for
            savetimestep: int, # timestep interval to save data to disk
            printtimestep: int, # timestep interval to print timestep
-           cfl: float): # Courant-Freidrichs-Lewy coefficient for time-step size
+           cfl: float) -> None: # Courant-Freidrichs-Lewy coefficient for time-step size
 
         # timestep size (s)
         dt = cfl*pts.dx*3./pts.c
@@ -71,7 +71,7 @@ class integrators:
            maxtimestep: int, # timestep to run simulation for
            savetimestep: int, # timestep interval to save data to disk
            printtimestep: int, # timestep interval to print timestep
-           cfl: float): # Courant-Freidrichs-Lewy coefficient for time-step size
+           cfl: float) -> None: # Courant-Freidrichs-Lewy coefficient for time-step size
 
         # timestep size (s)
         dt = cfl*pts.dx*3./pts.c

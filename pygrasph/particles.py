@@ -36,17 +36,17 @@ class particles:
         self.customvals = customvals
 
     # generate real particles (user to define)
-    def generate_real_coords(self):
+    def generate_real_coords(self) -> None:
 
         pass
 
     # generate virtual particles (user to define)
-    def generate_virt_coords(self):
+    def generate_virt_coords(self) -> None:
 
         pass
 
     # stress update function (DP model)
-    def stress_update(self, dstrain: _np.ndarray, drxy: _np.ndarray, sigma0: _np.ndarray):
+    def stress_update(self, dstrain: _np.ndarray, drxy: _np.ndarray, sigma0: _np.ndarray) -> None:
 
         # cache some references
         DE = self.customvals['DE'][:, :]
@@ -143,7 +143,7 @@ class particles:
         #     self.sigma[i, 3] = 0.
 
     # function to update self.pairs - list of particle pairs
-    def findpairs(self):
+    def findpairs(self) -> None:
 
         # find pairs using closefriends.query_pairs
         pair_i, pair_j, idx = _query_pairs(self.x[0:self.ntotal+self.nvirt, :], 3*self.dx, 30*(self.ntotal+self.nvirt))
@@ -169,7 +169,7 @@ class particles:
         self.pair_j = pair_j[nonvirtvirt_mask]
 
 
-    def update_virtualparticle_properties(self, kernel: _typing.Type):
+    def update_virtualparticle_properties(self, kernel: _typing.Type) -> None:
 
         # cache some references
         ntotal = self.ntotal
@@ -238,7 +238,7 @@ class particles:
                    drhodt: _np.ndarray, 
                    dstraindt: _np.ndarray, 
                    rxy: _np.ndarray,
-                   kernel: _typing.Type):
+                   kernel: _typing.Type) -> None:
 
         # cache some references
         pair_i = self.pair_i
@@ -314,7 +314,7 @@ class particles:
         _np.add.at(rxy, pair_j, hrxy/rho[pair_i])
 
     # function to save particle data
-    def save_data(self, itimestep: int):
+    def save_data(self, itimestep: int) -> None:
 
         with _h5py.File(f'output/sph_{itimestep}.h5', 'w') as f:
             f.attrs.create("n", data=self.ntotal+self.nvirt, dtype="i")

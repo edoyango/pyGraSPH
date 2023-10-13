@@ -15,14 +15,14 @@ class wendland_c2:
         self.h = h
         self.alpha = 7./(64.*_np.pi*self.h*self.h)
 
-    def w(self, r: _np.ndarray):
+    def w(self, r: _np.ndarray) -> _np.ndarray:
         """
         Calculates the kernel value for all the given inter-particle distances.
         r: a 1D NDArray of inter-particle distances.
         """
         q = r/self.h
         return self.alpha*_np.maximum(0., 2.-q)**4*(2.*q+1.)
-    def dwdx(self, dx: _np.ndarray):
+    def dwdx(self, dx: _np.ndarray) -> _np.ndarray:
         """
         Calculates the kernel gradients for all the given inter-particle relative positions.
         dx: a 2D NDArray of interparticle relative positions.
