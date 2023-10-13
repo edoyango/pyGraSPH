@@ -26,6 +26,10 @@ class particles:
         self.strain = np.zeros((maxn, 4), dtype=np.float64)
         self.sigma = np.zeros((maxn, 4), dtype=np.float64)
 
+        self.v0 = np.zeros((maxn, 2), dtype=np.float64)
+        self.rho0 = np.zeros((maxn, 2), dtype=np.float64)
+        self.sigma0 = np.zeros((maxn, 4), dtype=np.float64)
+
         self.pairs = np.ndarray((maxinter, 2))
 
         # custom data in dict
@@ -142,7 +146,17 @@ class particles:
     def findpairs(self):
 
         # find pairs using closefriends.query_pairs
-        pair_i, pair_j = query_pairs(self.x[0:self.ntotal+self.nvirt, :], 3*self.dx, 30*(self.ntotal+self.nvirt), retain_order=True)
+        pair_i, pair_j, idx = query_pairs(self.x[0:self.ntotal+self.nvirt, :], 3*self.dx, 30*(self.ntotal+self.nvirt))
+
+        self.v = self.v[idx, :]
+        self.rho = self.rho[idx]
+        self.id = self.id[idx]
+        self.type = self.type[idx]
+        self.strain = self.strain[idx, :]
+        self.sigma = self.sigma[idx, :]
+        self.v0 = self.v0[idx, :]
+        self.rho0 = self.rho0[idx]
+        self.sigma0 = self.sigma0[idx, :]
         
         # trim pairs to only consider real-real or real-virtual
         nonvirtvirt_mask = np.logical_or(
@@ -331,12 +345,9 @@ class integrators:
 
         # initialize arrays needed for time integration
         dvdt = np.tile(self.f, (pts.ntotal+pts.nvirt, 1)) # acceleration
-        v0 = np.empty((pts.ntotal+pts.nvirt, 2), dtype=np.float64) # velocity at start of timestep
         drhodt = np.zeros(pts.ntotal+pts.nvirt, dtype=np.float64) # density change rate
-        rho0 = np.empty(pts.ntotal+pts.nvirt, dtype=np.float64) # density at start of timestep
         dstraindt = np.zeros((pts.ntotal+pts.nvirt, 4), dtype=np.float64) # strain rate
         rxy = np.zeros(pts.ntotal+pts.nvirt, dtype=np.float64) # spin rate (for jaumann stress-rate)
-        sigma0 = np.empty((pts.ntotal+pts.nvirt, 4), dtype=np.float64) # stress at start of timestep
 
         # timestep size (s)
         dt = self.cfl*pts.dx*3./pts.c
@@ -344,21 +355,21 @@ class integrators:
         # begin time integration loop
         for itimestep in range(1, self.maxtimestep+1):
 
-            # find pairs
-            pts.findpairs()
-
-            realmask = pts.type[0:pts.ntotal+pts.nvirt] > 0
-
             # save data from start of timestep
-            v0 = np.copy(pts.v[0:pts.ntotal+pts.nvirt, :])
-            rho0 = np.copy(pts.rho[0:pts.ntotal+pts.nvirt])
-            sigma0 = np.copy(pts.sigma[0:pts.ntotal+pts.nvirt, :])
+            pts.v0 = np.copy(pts.v[0:pts.ntotal+pts.nvirt, :])
+            pts.rho0 = np.copy(pts.rho[0:pts.ntotal+pts.nvirt])
+            pts.sigma0 = np.copy(pts.sigma[0:pts.ntotal+pts.nvirt, :])
 
             # Update data to mid-timestep
             pts.rho[0:pts.ntotal+pts.nvirt] += 0.5*dt*drhodt[0:pts.ntotal+pts.nvirt]
             pts.v[0:pts.ntotal+pts.nvirt, :] += 0.5*dt*dvdt[0:pts.ntotal+pts.nvirt, :]
 
-            pts.stress_update(0.5*dt*dstraindt, 0.5*dt*rxy, sigma0)
+            pts.stress_update(0.5*dt*dstraindt, 0.5*dt*rxy, pts.sigma0)
+
+            # find pairs
+            pts.findpairs()
+
+            realmask = pts.type[0:pts.ntotal+pts.nvirt] > 0
 
             # initialize material rate arrays
             dvdt = np.tile(self.f, (pts.ntotal+pts.nvirt, 1))
@@ -369,11 +380,11 @@ class integrators:
             # perform sweep of pairs
             pts.pair_sweep(dvdt, drhodt, dstraindt, rxy, self.kernel)
 
-            pts.stress_update(dt*dstraindt, dt*rxy, sigma0)
+            pts.stress_update(dt*dstraindt, dt*rxy, pts.sigma0)
 
             # update data to full-timestep
-            np.add(rho0[0:pts.ntotal+pts.nvirt], dt*drhodt[0:pts.ntotal+pts.nvirt], where=realmask, out=pts.rho[0:pts.ntotal+pts.nvirt])
-            np.add(v0[0:pts.ntotal+pts.nvirt, :], dt*dvdt[0:pts.ntotal+pts.nvirt, :], where=realmask[:, np.newaxis], out=pts.v[0:pts.ntotal+pts.nvirt, :])
+            np.add(pts.rho0[0:pts.ntotal+pts.nvirt], dt*drhodt[0:pts.ntotal+pts.nvirt], where=realmask, out=pts.rho[0:pts.ntotal+pts.nvirt])
+            np.add(pts.v0[0:pts.ntotal+pts.nvirt, :], dt*dvdt[0:pts.ntotal+pts.nvirt, :], where=realmask[:, np.newaxis], out=pts.v[0:pts.ntotal+pts.nvirt, :])
             np.add(pts.x[0:pts.ntotal+pts.nvirt, :], dt*pts.v[0:pts.ntotal+pts.nvirt, :], where=realmask[:, np.newaxis], out=pts.x[0:pts.ntotal+pts.nvirt, :])
             np.add(pts.strain[0:pts.ntotal+pts.nvirt, :], dt*dstraindt[0:pts.ntotal+pts.nvirt, :], where=realmask[:, np.newaxis], out=pts.strain[0:pts.ntotal+pts.nvirt, :])
 
