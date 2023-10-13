@@ -66,12 +66,14 @@ if __name__ == '__main__':
                                         [   v,    v, 1.-v, 0.     ],
                                         [  0.,   0.,   0., 1.-2.*v]])
     
+    c = npy.sqrt((Kb+4./3.*Gs)/rho_ini)
+    
     # Initialize particles
     pts = my_particles(maxn=maxn, 
                        dx=0.002, 
                        rho_ini=rho_ini, 
                        maxinter=25*maxn, 
-                       c=npy.sqrt(E/rho_ini), 
+                       c=c, 
                        E=E, v=v, Kb=Kb, Gs=Gs, DE=DE,
                        alpha_phi=alpha_phi, alpha_psi=alpha_psi, k_c=k_c)
     
@@ -86,7 +88,9 @@ if __name__ == '__main__':
     wc2_kernel = kernels.wenland_c2(k=2, h=pts.dx*1.5)
     
     # initialize integrators class
-    itgs = classes.integrators(f=g, kernel=wc2_kernel, maxtimestep=2000, savetimestep=100, printtimestep=10, cfl=0.2)
+    itgs = classes.integrators(f=g, kernel=wc2_kernel)
 
     # integrate SPH particles using leap-frog time-integrator
-    itgs.LF(pts)
+    # itgs.LF(pts)
+
+    itgs.RK4(pts, maxtimestep=300, savetimestep=10, printtimestep=10, cfl=1.5)
