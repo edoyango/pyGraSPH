@@ -2,6 +2,7 @@ import numpy as np
 import scipy as sp
 import typing
 import h5py
+from closefriends import query_pairs
 
 # particles base class
 class particles:
@@ -136,17 +137,19 @@ class particles:
     # function to update self.pairs - list of particle pairs
     def findpairs(self):
 
-        tree = sp.spatial.cKDTree(self.x[0:self.ntotal+self.nvirt, :])
-        pairs = tree.query_pairs(3*self.dx, output_type='ndarray')
+        # find pairs using closefriends.query_pairs
+        pair_i, pair_j = query_pairs(self.x[0:self.ntotal+self.nvirt, :], 3*self.dx, 30*(self.ntotal+self.nvirt), retain_order=True)
         
         # trim pairs to only consider real-real or real-virtual
         nonvirtvirt_mask = np.logical_or(
-            self.type[pairs[:, 0]] > 0,
-            self.type[pairs[:, 1]] > 0
+            self.type[pair_i[:]] > 0,
+            self.type[pair_j[:]] > 0
         )
 
-        # organise pairs into seperate arrays for better use with np.ufunc.at
-        self.pair_i, self.pair_j = pairs[nonvirtvirt_mask, 0], pairs[nonvirtvirt_mask, 1]
+        # remove virt-virt pairs with mask
+        self.pair_i = pair_i[nonvirtvirt_mask]
+        self.pair_j = pair_j[nonvirtvirt_mask]
+
 
     def update_virtualparticle_properties(self, kernel: typing.Type):
 
