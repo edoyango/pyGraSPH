@@ -78,7 +78,7 @@ class particles:
 
         I1 = np.where(tensile_crack_check1_mask, k_c, I1)
         sigma[0:ntotal, 0:3] = np.where(
-            np.repeat(tensile_crack_check1_mask[:, np.newaxis], 3, 1),
+            tensile_crack_check1_mask[:, np.newaxis],
             k_c/3., 
             sigma[0:ntotal, 0:3]
         )
@@ -92,14 +92,17 @@ class particles:
         f_mask = f > 0.
         
         # normalize deviatoric stress tensor by its frobenius norm/2 (only for pts with f > 0)
-        shat = np.divide(
-            s, 
-            np.repeat(2.*npsqrt(J2)[:, np.newaxis], 4, 1), 
-            where=np.repeat(f_mask[:, np.newaxis], 4, 1)
+        shat = s.copy()
+        np.divide(
+            shat,
+            2.*npsqrt(J2)[:, np.newaxis], 
+            where=f_mask[:, np.newaxis],
+            out=shat
         )
+
         # update yield potential and plastic potential matrices with normalized deviatoric stress tensor
-        dfdsig = alpha_phi*Ide[:] + shat
-        dgdsig = alpha_psi*Ide[:] + shat
+        dfdsig = np.add(alpha_phi*Ide[np.newaxis, :], shat, where=f_mask[:, np.newaxis])
+        dgdsig = np.add(alpha_psi*Ide[np.newaxis, :], shat, where=f_mask[:, np.newaxis])
 
         # calculate plastic multipler
         dlambda = np.divide(
@@ -113,7 +116,7 @@ class particles:
             sigma[0:ntotal, :], 
             npmatmul(dlambda[:, np.newaxis]*dgdsig[:, :], DE[:, :]), 
             out=sigma[0:ntotal, :],
-            where=np.repeat(f_mask[:, np.newaxis], 4, 1)
+            where=f_mask[:, np.newaxis]
         )
 
         ## tensile cracking check 2:
@@ -121,7 +124,7 @@ class particles:
         I1 = np.sum(sigma[0:ntotal, 0:3], axis=1)
         tensile_crack_check2_mask = I1 > k_c/alpha_phi
         sigma[0:ntotal, 0:3] = np.where(
-            np.repeat(tensile_crack_check2_mask[:, np.newaxis], 3, 1),
+            tensile_crack_check2_mask[:, np.newaxis],
             k_c/alpha_phi/3, 
             sigma[0:ntotal, 0:3]
         )
@@ -206,13 +209,9 @@ class particles:
 
         # normalize virtual particle properties with summed kernels
         vw_mask = vw[ntotal:ntotal+nvirt]>0.
-        v[ntotal:ntotal+nvirt, 0] = np.divide(v[ntotal:ntotal+nvirt, 0], vw[ntotal:ntotal+nvirt], where=vw_mask)
-        v[ntotal:ntotal+nvirt, 1] = np.divide(v[ntotal:ntotal+nvirt, 1], vw[ntotal:ntotal+nvirt], where=vw_mask)
-        sigma[ntotal:ntotal+nvirt, 0] = np.divide(sigma[ntotal:ntotal+nvirt, 0], vw[ntotal:ntotal+nvirt], where=vw_mask)
-        sigma[ntotal:ntotal+nvirt, 1] = np.divide(sigma[ntotal:ntotal+nvirt, 1], vw[ntotal:ntotal+nvirt], where=vw_mask)
-        sigma[ntotal:ntotal+nvirt, 2] = np.divide(sigma[ntotal:ntotal+nvirt, 2], vw[ntotal:ntotal+nvirt], where=vw_mask)
-        sigma[ntotal:ntotal+nvirt, 3] = np.divide(sigma[ntotal:ntotal+nvirt, 3], vw[ntotal:ntotal+nvirt], where=vw_mask)
-        rho[ntotal:ntotal+nvirt] = np.divide(rho[ntotal:ntotal+nvirt], vw[ntotal:ntotal+nvirt], where=vw_mask)
+        np.divide(v[ntotal:ntotal+nvirt, :], vw[ntotal:ntotal+nvirt, np.newaxis], where=vw_mask[:, np.newaxis], out=v[ntotal:ntotal+nvirt, :])
+        np.divide(sigma[ntotal:ntotal+nvirt, :], vw[ntotal:ntotal+nvirt, np.newaxis], where=vw_mask[:, np.newaxis], out=sigma[ntotal:ntotal+nvirt, :])
+        np.divide(rho[ntotal:ntotal+nvirt], vw[ntotal:ntotal+nvirt], where=vw_mask, out=rho[ntotal:ntotal+nvirt])
         rho[ntotal:ntotal+nvirt] = np.where(vw_mask, rho[ntotal:ntotal+nvirt], self.rho_ini)
 
     # function to perform sweep over all particle pairs
