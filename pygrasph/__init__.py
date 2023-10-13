@@ -2,6 +2,7 @@ import numpy as np
 import typing
 import h5py
 from closefriends import query_pairs
+from . import kernels
 
 # particles base class
 class particles:

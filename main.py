@@ -1,6 +1,5 @@
 import numpy as npy
 import pygrasph
-import kernels
 
 # extend particles base class
 class my_particles(pygrasph.particles):
@@ -85,7 +84,7 @@ if __name__ == '__main__':
     g = [0., -9.81]
     
     # select SPH kernel
-    wc2_kernel = kernels.wenland_c2(k=2, h=pts.dx*1.5)
+    wc2_kernel = pygrasph.kernels.wenland_c2(k=2, h=pts.dx*1.5)
     
     # initialize integrators class
     itgs = pygrasph.integrators(f=g, kernel=wc2_kernel)
