@@ -88,9 +88,9 @@ if __name__ == '__main__':
     wc2_kernel = kernels.wenland_c2(k=2, h=pts.dx*1.5)
     
     # initialize integrators class
-    itgs = classes.integrators(f=g, kernel=wc2_kernel, maxtimestep=300, savetimestep=10, printtimestep=10, cfl=1.5)
+    itgs = classes.integrators(f=g, kernel=wc2_kernel)
 
     # integrate SPH particles using leap-frog time-integrator
     # itgs.LF(pts)
 
-    itgs.RK4(pts)
+    itgs.RK4(pts, maxtimestep=300, savetimestep=10, printtimestep=10, cfl=1.5)

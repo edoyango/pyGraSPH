@@ -329,19 +329,15 @@ class particles:
 class integrators:
     def __init__(self,
                  f: np.ndarray,
-                 kernel: typing.Type,
-                 maxtimestep: int,
-                 savetimestep: int,
-                 printtimestep: int,
-                 cfl: float):
-        self.cfl = cfl # Courant-Freidrichs-Lewy coefficient for time-step size
+                 kernel: typing.Type):
         self.f = f     # body force vector e.g. gravity
         self.kernel = kernel # kernel function of choice
-        self.maxtimestep = maxtimestep # timestep to run simulation for
-        self.savetimestep = savetimestep # timestep interval to save data to disk
-        self.printtimestep = printtimestep # timestep interval to print timestep
 
-    def LF(self, pts: particles):
+    def LF(self, pts: particles,
+           maxtimestep: int, # timestep to run simulation for
+           savetimestep: int, # timestep interval to save data to disk
+           printtimestep: int, # timestep interval to print timestep
+           cfl: float): # Courant-Freidrichs-Lewy coefficient for time-step size
 
         # initialize arrays needed for time integration
         dvdt = np.tile(self.f, (pts.ntotal+pts.nvirt, 1)) # acceleration
@@ -350,10 +346,10 @@ class integrators:
         rxy = np.zeros(pts.ntotal+pts.nvirt, dtype=np.float64) # spin rate (for jaumann stress-rate)
 
         # timestep size (s)
-        dt = self.cfl*pts.dx*3./pts.c
+        dt = cfl*pts.dx*3./pts.c
 
         # begin time integration loop
-        for itimestep in range(1, self.maxtimestep+1):
+        for itimestep in range(1, maxtimestep+1):
 
             # save data from start of timestep
             pts.v0 = np.copy(pts.v[0:pts.ntotal+pts.nvirt, :])
@@ -389,9 +385,100 @@ class integrators:
             np.add(pts.strain[0:pts.ntotal+pts.nvirt, :], dt*dstraindt[0:pts.ntotal+pts.nvirt, :], where=realmask[:, np.newaxis], out=pts.strain[0:pts.ntotal+pts.nvirt, :])
 
             # print data to terminal if needed
-            if itimestep % self.printtimestep == 0:
+            if itimestep % printtimestep == 0:
                 print(f'time-step: {itimestep}')
             
             # save data to disk if needed
-            if itimestep % self.savetimestep == 0:
+            if itimestep % savetimestep == 0:
+                pts.save_data(itimestep)
+
+    def RK4(self, pts: particles,
+           maxtimestep: int, # timestep to run simulation for
+           savetimestep: int, # timestep interval to save data to disk
+           printtimestep: int, # timestep interval to print timestep
+           cfl: float): # Courant-Freidrichs-Lewy coefficient for time-step size
+
+        # timestep size (s)
+        dt = cfl*pts.dx*3./pts.c
+
+        RK4_weights = np.array([1., 2., 2., 1.])
+
+        # begin time integration loop
+        for itimestep in range(1, maxtimestep+1):
+
+            # initialize arrays needed for time integration
+            dvdt = np.tile(self.f, (4, pts.ntotal+pts.nvirt, 1)) # acceleration
+            drhodt = np.zeros((4, pts.ntotal+pts.nvirt), dtype=np.float64) # density change rate
+            dstraindt = np.zeros((4, pts.ntotal+pts.nvirt, 4), dtype=np.float64) # strain rate
+            rxy = np.zeros((4, pts.ntotal+pts.nvirt), dtype=np.float64) # spin rate (for jaumann stress-rate)
+
+            # save data from start of timestep
+            pts.v0 = np.copy(pts.v[0:pts.ntotal+pts.nvirt, :])
+            pts.rho0 = np.copy(pts.rho[0:pts.ntotal+pts.nvirt])
+            pts.sigma0 = np.copy(pts.sigma[0:pts.ntotal+pts.nvirt, :])
+
+            # find pairs
+            pts.findpairs()
+
+            realmask = pts.type[0:pts.ntotal+pts.nvirt] > 0
+
+            # k1 ---------------------------------------------------------------
+            
+            # perform sweep of pairs
+            pts.pair_sweep(dvdt[0, :, :], drhodt[0, :], dstraindt[0, :, :], rxy[0, :], self.kernel)
+
+            # k2 ---------------------------------------------------------------
+
+            # update properties to half timestep
+            np.add(pts.rho0[0:pts.ntotal+pts.nvirt], dt/RK4_weights[1]*drhodt[0, 0:pts.ntotal+pts.nvirt], where=realmask, out=pts.rho[0:pts.ntotal+pts.nvirt])
+            np.add(pts.v0[0:pts.ntotal+pts.nvirt, :], dt/RK4_weights[1]*dvdt[0, 0:pts.ntotal+pts.nvirt, :], where=realmask[:, np.newaxis], out=pts.v[0:pts.ntotal+pts.nvirt, :])
+
+            pts.stress_update(dt/RK4_weights[1]*dstraindt[0, :, :], dt/RK4_weights[1]*rxy[0, :], pts.sigma0)
+
+            # perform sweep of pairs
+            pts.pair_sweep(dvdt[1, :, :], drhodt[1, :], dstraindt[1, :, :], rxy[1, :], self.kernel)
+
+            # k3 ---------------------------------------------------------------
+
+            # update properties to half timestep
+            np.add(pts.rho0[0:pts.ntotal+pts.nvirt], dt/RK4_weights[2]*drhodt[1, 0:pts.ntotal+pts.nvirt], where=realmask, out=pts.rho[0:pts.ntotal+pts.nvirt])
+            np.add(pts.v0[0:pts.ntotal+pts.nvirt, :], dt/RK4_weights[2]*dvdt[1, 0:pts.ntotal+pts.nvirt, :], where=realmask[:, np.newaxis], out=pts.v[0:pts.ntotal+pts.nvirt, :])
+
+            pts.stress_update(dt/RK4_weights[2]*dstraindt[1, :, :], dt/RK4_weights[2]*rxy[1, :], pts.sigma0)
+
+            # perform sweep of pairs
+            pts.pair_sweep(dvdt[2, :, :], drhodt[2, :], dstraindt[2, :, :], rxy[2, :], self.kernel)
+
+            # k4 ---------------------------------------------------------------
+
+            # update properties to half timestep
+            np.add(pts.rho0[0:pts.ntotal+pts.nvirt], dt/RK4_weights[3]*drhodt[2, 0:pts.ntotal+pts.nvirt], where=realmask, out=pts.rho[0:pts.ntotal+pts.nvirt])
+            np.add(pts.v0[0:pts.ntotal+pts.nvirt, :], dt/RK4_weights[3]*dvdt[2, 0:pts.ntotal+pts.nvirt, :], where=realmask[:, np.newaxis], out=pts.v[0:pts.ntotal+pts.nvirt, :])
+
+            pts.stress_update(dt/RK4_weights[3]*dstraindt[2, :, :], dt/RK4_weights[3]*rxy[2, :], pts.sigma0)
+
+            # perform sweep of pairs
+            pts.pair_sweep(dvdt[3, :, :], drhodt[3, :], dstraindt[3, :, :], rxy[3, :], self.kernel)
+
+            # final update -----------------------------------------------------
+
+            drdhot_tot = np.einsum("i,ij->j", RK4_weights/6., drhodt[:, 0:pts.ntotal+pts.nvirt])
+            dvdt_tot = np.einsum("i,ijk->jk", RK4_weights/6., dvdt[:, 0:pts.ntotal+pts.nvirt, :])
+            dstraindt_tot = np.einsum("i,ijk->jk", RK4_weights/6., dstraindt[:, 0:pts.ntotal+pts.nvirt, :])
+            rxy_tot = np.einsum("i,ij->j", RK4_weights/6., rxy[:, 0:pts.ntotal+pts.nvirt])
+
+            # update data to full-timestep
+            np.add(pts.rho0[0:pts.ntotal+pts.nvirt], dt*drdhot_tot[0:pts.ntotal+pts.nvirt], where=realmask, out=pts.rho[0:pts.ntotal+pts.nvirt])
+            np.add(pts.v0[0:pts.ntotal+pts.nvirt, :], dt*dvdt_tot[0:pts.ntotal+pts.nvirt, :], where=realmask[:, np.newaxis], out=pts.v[0:pts.ntotal+pts.nvirt, :])
+            np.add(pts.x[0:pts.ntotal+pts.nvirt, :], dt*pts.v[0:pts.ntotal+pts.nvirt, :], where=realmask[:, np.newaxis], out=pts.x[0:pts.ntotal+pts.nvirt, :])
+            np.add(pts.strain[0:pts.ntotal+pts.nvirt, :], dt*dstraindt_tot[0:pts.ntotal+pts.nvirt, :], where=realmask[:, np.newaxis], out=pts.strain[0:pts.ntotal+pts.nvirt, :])
+
+            pts.stress_update(dt*dstraindt_tot, dt*rxy_tot, pts.sigma0)
+
+            # print data to terminal if needed
+            if itimestep % printtimestep == 0:
+                print(f'time-step: {itimestep}')
+            
+            # save data to disk if needed
+            if itimestep % savetimestep == 0:
                 pts.save_data(itimestep)
