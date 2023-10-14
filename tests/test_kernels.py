@@ -42,16 +42,16 @@ def test_kernel_methods():
     assert True
 
 def test_wendlandc2_correctness():
+     # known correct calculation
     dx = np.array([[0.5, 0.5]])
     r = np.linalg.norm(dx[0])
     h = 1.
     q = r/h
     alpha = 7./(64.*np.pi*h*h)
-    w_ref = alpha*np.maximum(0., 2.-q)**4*(2.*q+1.) # known correct calculation
+    w_ref = alpha*np.maximum(0., 2.-q)**4*(2.*q+1.)
     dwdx_ref = -alpha*10.*q*np.maximum(0., 2.-q)**3/(r*h)*dx
-    kernel = init_kernel(pygrasph.kernels.wendland_c2)
-    
-    res = w_ref == kernel.w(r)
-    res = res and np.all(dwdx_ref==kernel.dwdx(dx))
 
-    assert res
+    # initialize kernel
+    kernel = init_kernel(pygrasph.kernels.wendland_c2)
+
+    assert (w_ref == kernel.w(r)) and np.all(dwdx_ref==kernel.dwdx(dx))
