@@ -2,6 +2,7 @@ import numpy as _np
 import typing as _typing
 from closefriends import query_pairs as _query_pairs
 import h5py as _h5py
+import math as _math
 
 # particles base class
 class particles:
@@ -160,13 +161,18 @@ class particles:
         #     self.sigma[i, 3] = 0.
 
     # function to update self.pairs - list of particle pairs
-    def findpairs(self) -> None:
+    def findpairs(self, kh: float) -> None:
         """
         Function to find pairs of the particles. 
         """
 
+        # max number of interactions
+        maxnpair = _np.pi*(_math.ceil(kh)+1)**2
+        maxnpair *= self.ntotal+self.nvirt
+        maxnpair = int(maxnpair)
+
         # find pairs using closefriends.query_pairs
-        pair_i, pair_j, idx = _query_pairs(self.x[0:self.ntotal+self.nvirt, :], 3*self.dx, 30*(self.ntotal+self.nvirt))
+        pair_i, pair_j, idx = _query_pairs(self.x[0:self.ntotal+self.nvirt, :], kh, maxnpair)
 
         self.v = self.v[idx, :]
         self.rho = self.rho[idx]

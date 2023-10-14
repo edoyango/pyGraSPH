@@ -30,7 +30,7 @@ class integrators:
         """
 
         # timestep size (s)
-        dt = cfl*pts.dx*3./pts.c
+        dt = cfl*self.kernel.h/pts.c
 
         # cache some references
         ntotal = pts.ntotal
@@ -51,7 +51,7 @@ class integrators:
             pts.stress_update(0.5*dt*dstraindt, 0.5*dt*rxy, pts.sigma0)
 
             # find pairs
-            pts.findpairs()
+            pts.findpairs(self.kernel.k*self.kernel.h)
 
             realmask = pts.type[0:ntotal+nvirt] > 0
 
@@ -97,7 +97,7 @@ class integrators:
         """
 
         # timestep size (s)
-        dt = cfl*pts.dx*3./pts.c
+        dt = cfl*self.kernel.h/pts.c
 
         RK4_weights = _np.array([1., 2., 2., 1.])
 
@@ -120,7 +120,7 @@ class integrators:
             pts.sigma0 = _np.copy(pts.sigma[0:ntotal+nvirt, :])
 
             # find pairs
-            pts.findpairs()
+            pts.findpairs(self.kernel.k*self.kernel.h)
 
             realmask = pts.type[0:ntotal+nvirt] > 0
 
