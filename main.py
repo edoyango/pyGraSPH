@@ -92,4 +92,4 @@ if __name__ == '__main__':
     # integrate SPH particles using leap-frog time-integrator
     # itgs.LF(pts)
 
-    itgs.RK4(pts, maxtimestep=300, savetimestep=10, printtimestep=10, cfl=1.5)
+    itgs.RK4(pts, maxtimestep=500, savetimestep=10, printtimestep=10, cfl=2.5)
