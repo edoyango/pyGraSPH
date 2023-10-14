@@ -1,9 +1,8 @@
 import numpy as npy
-import classes
-import kernels
+import pygrasph
 
 # extend particles base class
-class my_particles(classes.particles):
+class my_particles(pygrasph.particles):
 
     # add function to original particles class to generate real particles
     def generate_real_coords(self, mp: int, np: int):
@@ -85,12 +84,12 @@ if __name__ == '__main__':
     g = [0., -9.81]
     
     # select SPH kernel
-    wc2_kernel = kernels.wenland_c2(k=2, h=pts.dx*1.5)
+    wc2_kernel = pygrasph.kernels.wendland_c2(k=2, h=pts.dx*1.5)
     
     # initialize integrators class
-    itgs = classes.integrators(f=g, kernel=wc2_kernel)
+    itgs = pygrasph.integrators(f=g, kernel=wc2_kernel)
 
     # integrate SPH particles using leap-frog time-integrator
     # itgs.LF(pts)
 
-    itgs.RK4(pts, maxtimestep=300, savetimestep=10, printtimestep=10, cfl=1.5)
+    itgs.RK4(pts, maxtimestep=500, savetimestep=10, printtimestep=10, cfl=2.5)
