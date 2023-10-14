@@ -7,7 +7,7 @@ A Python, and super basic, version of GraSPH. Early stages of development. Only 
 Package requirements:
 
 ```bash
-pip install -r requirements.txt
+pip install git+https://github.com/edoyango/pyGraSPH.git
 ```
 
 NumPy version 1.25 is used here as performance improvements are introduced which
