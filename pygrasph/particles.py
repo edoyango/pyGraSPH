@@ -14,7 +14,6 @@ class particles:
 
         # particle constants
         self.dx = dx               # particle spacing (m)
-        self.h = 1.5*dx            # smoothing length (m)
         self.rho_ini = rho_ini     # initial/reference density (km/m3)
         self.mass = rho_ini*dx**2  # mass (kg)
         self.maxn = maxn           # max number of particles
@@ -291,7 +290,7 @@ class particles:
         v = self.v
         rho = self.rho
         sigma = self.sigma
-        h = self.h; c = self.c; mass = self.mass
+        h = kernel.h; c = self.c; mass = self.mass
 
         ## calculate differential position vector and kernel gradient first ----
         dx = x[pair_i, :] - x[pair_j, :]
