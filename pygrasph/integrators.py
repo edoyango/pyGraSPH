@@ -4,6 +4,9 @@ from . import particles as _particles
 
 # container class to hold time integration functions
 class integrators:
+    """
+    Container class for integrators that evolve particles' properties over time.
+    """
     def __init__(self,
                  f: _np.ndarray,
                  kernel: _typing.Type):
@@ -15,6 +18,16 @@ class integrators:
            savetimestep: int, # timestep interval to save data to disk
            printtimestep: int, # timestep interval to print timestep
            cfl: float) -> None: # Courant-Freidrichs-Lewy coefficient for time-step size
+        """
+        Leap-Frog time-integration.
+        pts: the set of particles to simulate.
+        maxtimestep: maximum timesteps to run the simulation for.
+        savetimestep: the frequency (in timesteps) with which to save a snapshot
+                      of the particles to disc.
+        printtimestep: the frequency (in timesteps) with which to print the 
+                       current timestep to stdout.
+        cfl: the constant used to control the time-step size where dt = cfl*h/c.
+        """
 
         # timestep size (s)
         dt = cfl*pts.dx*3./pts.c
@@ -72,6 +85,16 @@ class integrators:
            savetimestep: int, # timestep interval to save data to disk
            printtimestep: int, # timestep interval to print timestep
            cfl: float) -> None: # Courant-Freidrichs-Lewy coefficient for time-step size
+        """
+        Runge-Kutte fourth-order time-integration.
+        pts: the set of particles to simulate.
+        maxtimestep: maximum timesteps to run the simulation for.
+        savetimestep: the frequency (in timesteps) with which to save a snapshot
+                      of the particles to disc.
+        printtimestep: the frequency (in timesteps) with which to print the 
+                       current timestep to stdout.
+        cfl: the constant used to control the time-step size where dt = cfl*h/c
+        """
 
         # timestep size (s)
         dt = cfl*pts.dx*3./pts.c

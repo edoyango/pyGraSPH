@@ -5,6 +5,10 @@ import h5py as _h5py
 
 # particles base class
 class particles:
+    """
+    Class to store the particles' properties and necessary functions for an SPH
+    simulation.
+    """
     def __init__(self, maxn: int, dx: float, rho_ini: float, maxinter: int, c: float, **customvals):
 
         # particle constants
@@ -47,6 +51,19 @@ class particles:
 
     # stress update function (DP model)
     def stress_update(self, dstrain: _np.ndarray, drxy: _np.ndarray, sigma0: _np.ndarray) -> None:
+        """
+        Updates the particles' stress (sigma) using a semi-implicit 
+        elasto-plastic stress update procedure with Drucker-Prager yield
+        surface.
+        dstrain: a 2D ndarray storing the strain increment to be applied for
+                 each particle. Rows represent particles, and columns represent
+                 their incremental strain tensor (voigt notation).
+        drxy: a 1D ndarray storing the xy-component of the rotation incrememt
+              tensor of all particles.
+        sigma0: a 2D ndarray storing the initial stress states of all particles.
+                Rows represent particles, and columns represent their initial
+                stress tensor (voigt notation).
+        """
 
         # cache some references
         DE = self.customvals['DE'][:, :]
@@ -144,6 +161,9 @@ class particles:
 
     # function to update self.pairs - list of particle pairs
     def findpairs(self) -> None:
+        """
+        Function to find pairs of the particles. 
+        """
 
         # find pairs using closefriends.query_pairs
         pair_i, pair_j, idx = _query_pairs(self.x[0:self.ntotal+self.nvirt, :], 3*self.dx, 30*(self.ntotal+self.nvirt))
@@ -170,6 +190,11 @@ class particles:
 
 
     def update_virtualparticle_properties(self, kernel: _typing.Type) -> None:
+        """
+        Function to update virtual particle properties by performing a kernel
+        interpolation of real particles' properties around each virtual
+        particle.
+        """
 
         # cache some references
         ntotal = self.ntotal
@@ -239,6 +264,17 @@ class particles:
                    dstraindt: _np.ndarray, 
                    rxy: _np.ndarray,
                    kernel: _typing.Type) -> None:
+        """
+        Performs a sweep over all particle pairs.
+        dvdt: a 2D ndarray representing the acceleration of all particles.
+              Should be initialized with the body force vector.
+        drdhot: a 1D ndarray representing the density change rate of all
+                particles. Should be initialized to 0.
+        dstraindt: a 2D ndarray representing the strain rate tensor of all 
+                   particles (in voigt notation). Should be initialized to 0.
+        rxy: a 1D ndarray representing the xy-component of the rotation tensor.
+             Should be initialized to 0.
+        """
 
         # cache some references
         pair_i = self.pair_i
@@ -315,6 +351,9 @@ class particles:
 
     # function to save particle data
     def save_data(self, itimestep: int) -> None:
+        """
+        Function to save (compressed) particle data as hdf5 files.
+        """
 
         with _h5py.File(f'output/sph_{itimestep}.h5', 'w') as f:
             f.attrs.create("n", data=self.ntotal+self.nvirt, dtype="i")
