@@ -3,39 +3,42 @@ import typing as _typing
 from . import particles as _particles
 import logging
 
-# container class to hold time integration functions
-class integrators:
+class base_integrator:
     """
-    Container class for integrators that evolve particles' properties over time.
+    A base integrator to build on top of.
     """
-    def __init__(self,
-                 f: _np.ndarray,
-                 kernel: _typing.Type):
-        self.f = f     # body force vector e.g. gravity
-        self.kernel = kernel # kernel function of choice
-
-    def LF(self, pts: _particles,
-           maxtimestep: int, # timestep to run simulation for
-           savetimestep: int, # timestep interval to save data to disk
-           printtimestep: int, # timestep interval to print timestep
-           cfl: float,
-           debug: bool = False) -> None: # Courant-Freidrichs-Lewy coefficient for time-step size
+    def __init__(self, f: _np.ndarray, kernel: _typing.Callable):
+        self. f = f
+        self.kernel = kernel
+    
+    def __call__(self, pts: _particles, maxtimestep: int, savetimestep: int, printtimestep: int, cfl: float, debug: bool = False) -> None:
         """
-        Leap-Frog time-integration.
-        pts: the set of particles to simulate.
-        maxtimestep: maximum timesteps to run the simulation for.
-        savetimestep: the frequency (in timesteps) with which to save a snapshot
-                      of the particles to disc.
-        printtimestep: the frequency (in timesteps) with which to print the 
-                       current timestep to stdout.
-        cfl: the constant used to control the time-step size where dt = cfl*h/c.
-        """
+        Function to provide basic validation and creat the logger object for derived integrators.
 
+        Args:
+            pts: the set of particles to simulate.
+            maxtimestep: maximum timesteps to run the simulation for.
+            savetimestep: the frequency (in timesteps) with which to save a snapshot
+                        of the particles to disc.
+            printtimestep: the frequency (in timesteps) with which to print the 
+                        current timestep to stdout.
+            cfl: the constant used to control the time-step size where dt = cfl*h/c.
+        """
         loglevel = logging.DEBUG if debug else logging.INFO
         logging.basicConfig(level=loglevel)
-        logger = logging.getLogger(__name__ + ".LF")
+        logger = logging.getLogger(__name__ + self.__class__.__name__)
+        self._integrate(pts, maxtimestep, savetimestep, printtimestep, cfl, logger)
+    
+    def _integrate(self, pts: _particles, maxtimestep: int, savetimestep: int, printtimestep: int, cfl: float, logger):
 
-        logger.debug("Initializing time integration parameters.")
+        raise NotImplementedError("_integrate function not defined!")
+
+class LF(base_integrator):
+    
+    def _integrate(self, pts: _particles, maxtimestep: int, savetimestep: int, printtimestep: int, cfl: float, logger):
+        """
+        Leap-Frog time-integration
+        """
 
         # timestep size (s)
         dt = cfl*self.kernel.h/pts.c
@@ -118,12 +121,9 @@ class integrators:
             
             logger.debug(f"Finished timestep: {itimestep}")
 
-    def RK4(self, pts: _particles,
-           maxtimestep: int, # timestep to run simulation for
-           savetimestep: int, # timestep interval to save data to disk
-           printtimestep: int, # timestep interval to print timestep
-           cfl: float,
-           debug: bool = False) -> None: # Courant-Freidrichs-Lewy coefficient for time-step size
+class RK4(base_integrator):
+
+    def _integrate(self, pts: _particles, maxtimestep: int, savetimestep: int, printtimestep: int, cfl: float, logger):
         """
         Runge-Kutte fourth-order time-integration.
         pts: the set of particles to simulate.
@@ -134,10 +134,6 @@ class integrators:
                        current timestep to stdout.
         cfl: the constant used to control the time-step size where dt = cfl*h/c
         """
-
-        loglevel = logging.DEBUG if debug else logging.INFO
-        logging.basicConfig(level=loglevel)
-        logger = logging.getLogger(__name__ + ".RK4")
 
         logger.debug("Initializing time integration parameters.")
 

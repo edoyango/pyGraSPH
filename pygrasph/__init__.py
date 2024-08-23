@@ -1,3 +1,3 @@
 from . import kernels
-from .integrators import integrators
+from . import integrators
 from .particles import particles

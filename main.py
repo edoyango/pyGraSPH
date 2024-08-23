@@ -87,9 +87,9 @@ if __name__ == '__main__':
     wc2_kernel = pygrasph.kernels.wendland_c2(k=2, h=pts.dx*1.5)
     
     # initialize integrators class
-    itgs = pygrasph.integrators(f=g, kernel=wc2_kernel)
-
     # integrate SPH particles using leap-frog time-integrator
-    # itgs.LF(pts)
+    # itg = pytgrasph.integrators.LF(f=g, kernel=wc2_kernel)
+    # integrate SPH particles using RK4 time-integrator
+    itg = pygrasph.integrators.RK4(f=g, kernel=wc2_kernel)
 
-    itgs.RK4(pts, maxtimestep=500, savetimestep=10, printtimestep=10, cfl=2.5)
+    itg(pts, maxtimestep=500, savetimestep=10, printtimestep=10, cfl=2.5)
