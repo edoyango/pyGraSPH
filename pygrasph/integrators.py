@@ -19,7 +19,7 @@ class integrators:
            savetimestep: int, # timestep interval to save data to disk
            printtimestep: int, # timestep interval to print timestep
            cfl: float,
-           debug: bool = True) -> None: # Courant-Freidrichs-Lewy coefficient for time-step size
+           debug: bool = False) -> None: # Courant-Freidrichs-Lewy coefficient for time-step size
         """
         Leap-Frog time-integration.
         pts: the set of particles to simulate.
