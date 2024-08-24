@@ -6,6 +6,7 @@ def DP(pts: particles, dstrain: _np.ndarray, drxy: _np.ndarray, sigma0: _np.ndar
     Updates the particles' stress (sigma) using a semi-implicit 
     elasto-plastic stress update procedure with Drucker-Prager yield
     surface.
+    pts: the particles whose stresses are to be updated.
     dstrain: a 2D ndarray storing the strain increment to be applied for
                 each particle. Rows represent particles, and columns represent
                 their incremental strain tensor (voigt notation).
@@ -106,7 +107,12 @@ def DP(pts: particles, dstrain: _np.ndarray, drxy: _np.ndarray, sigma0: _np.ndar
 
 def linear_EOS(pts: particles, *args, **kwargs) -> None:
 
+    """
+    Updates the particles' stress (sigma) using a linear equation of state.
+    pts: the particles whose stresses are to be updated.
+    """
+
     # simple fluid equation of state.
     p = pts.c*pts.c*(pts.rho[:] - pts.rho_ini)
-    pts.sigma[:, :4] = _np.tile(p, (3, 1)).T
-    pts.sigma[:, 4] = 0.
+    pts.sigma[:, :3] = _np.tile(-p, (3, 1)).T
+    pts.sigma[:, 3] = 0.

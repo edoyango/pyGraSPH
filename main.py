@@ -1,5 +1,6 @@
 import numpy as npy
 import pygrasph
+from pygrasph.stress_update import DP, linear_EOS
 
 # extend particles base class
 class my_particles(pygrasph.particles):
@@ -73,6 +74,7 @@ if __name__ == '__main__':
                        rho_ini=rho_ini, 
                        maxinter=25*maxn, 
                        c=c,
+                       f_stress_update=DP,
                        # below args are passed to stress_update 
                        E=E, v=v, Kb=Kb, Gs=Gs, DE=DE,
                        alpha_phi=alpha_phi, alpha_psi=alpha_psi, k_c=k_c)

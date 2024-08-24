@@ -66,9 +66,7 @@ class particles:
     # stress update function (DP model)
     def stress_update(self, dstrain: _np.ndarray, drxy: _np.ndarray, sigma0: _np.ndarray) -> None:
         """
-        Updates the particles' stress (sigma) using a semi-implicit 
-        elasto-plastic stress update procedure with Drucker-Prager yield
-        surface.
+        Updates the particles' stress (sigma) using the _stress_update function.
         dstrain: a 2D ndarray storing the strain increment to be applied for
                  each particle. Rows represent particles, and columns represent
                  their incremental strain tensor (voigt notation).
