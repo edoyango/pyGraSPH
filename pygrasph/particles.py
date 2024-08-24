@@ -57,11 +57,11 @@ class particles:
     @validate_call
     def add_real_particle(self, 
                           x: NDArray[Shape["2 d"], _np.float64], 
-                          v: NDArray[Shape["2 d"], _np.float64],
-                          rho: float,
-                          strain: NDArray[Shape["4 d"], _np.float64],
-                          sigma: NDArray[Shape["4 d"], _np.float64],
-                          type: int = Field(gt=0),
+                          v: NDArray[Shape["2 d"], _np.float64] = None,
+                          rho: float = None,
+                          strain: NDArray[Shape["4 d"], _np.float64] = None,
+                          sigma: NDArray[Shape["4 d"], _np.float64] = None,
+                          type: int = Field(gt=0, default=1),
                           ) -> None:
         """
         Helper function used to insert a particle
@@ -72,10 +72,10 @@ class particles:
             raise RuntimeError("The maximum number of particles has been exceeded! Modify the maxn parameter and try again.")
 
         self.x[self.ntotal, :] = x[:]
-        self.v[self.ntotal, :] = v[:]
-        self.rho[self.ntotal] = rho
-        self.strain[self.ntotal, :] = strain[:]
-        self.sigma[self.ntotal, :] = sigma[:]
+        if v is not None: self.v[self.ntotal, :] = v[:]
+        if rho is not None: self.rho[self.ntotal] = rho
+        if strain is not None: self.strain[self.ntotal, :] = strain[:]
+        if sigma is not None: self.sigma[self.ntotal, :] = sigma[:]
         self.type[self.ntotal] = type
 
         self.ntotal += 1
@@ -83,21 +83,21 @@ class particles:
     @validate_call
     def add_virt_particle(self, 
                           x: NDArray[Shape["2 d"], _np.float64], 
-                          v: NDArray[Shape["2 d"], _np.float64],
-                          rho: float,
-                          strain: NDArray[Shape["4 d"], _np.float64],
-                          sigma: NDArray[Shape["4 d"], _np.float64],
-                          type: int = Field(lt=0),
+                          v: NDArray[Shape["2 d"], _np.float64] = None,
+                          rho: float = None,
+                          strain: NDArray[Shape["4 d"], _np.float64] = None,
+                          sigma: NDArray[Shape["4 d"], _np.float64] = None,
+                          type: int = Field(lt=0, default=-1),
                           ) -> None:
         
         if self.ntotal+self.nvirt >= self.maxn:
             raise RuntimeError("The maximum number of particles has been exceeded! Modify the maxn parameter and try again.")
     
         self.x[self.ntotal+self.nvirt, :] = x[:]
-        self.v[self.ntotal+self.nvirt, :] = v[:]
-        self.rho[self.ntotal+self.nvirt] = rho
-        self.strain[self.ntotal+self.nvirt, :] = strain[:]
-        self.sigma[self.ntotal+self.nvirt, :] = sigma[:]
+        if v is not None: self.v[self.ntotal+self.nvirt, :] = v[:]
+        if rho is not None: self.rho[self.ntotal+self.nvirt] = rho
+        if strain is not None: self.strain[self.ntotal+self.nvirt, :] = strain[:]
+        if sigma is not None: self.sigma[self.ntotal+self.nvirt, :] = sigma[:]
         self.type[self.ntotal+self.nvirt] = type
 
         self.nvirt += 1

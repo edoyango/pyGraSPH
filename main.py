@@ -6,15 +6,16 @@ from pygrasph.stress_update import DP, linear_EOS
 # add function to original particles class to generate real particles
 def generate_real_coords(pts: pygrasph.particles, mp: int, np: int):
 
+    # generate rectangle of particles
     for i in range(mp):
         for j in range(np):
             pts.add_real_particle(
                 x=((i + 0.5)*pts.dx, (j + 0.5)*pts.dx),
-                v=(0., 0.),
-                rho=pts.rho_ini,
-                strain=[0.]*4,
-                sigma=[0.]*4,
-                type=1
+                # velocity defaults to 0
+                # rho (density) defaults to rho_ini
+                # strain defaults to 0
+                # stress defaults to 0
+                # type defaults to 1 (real particles must be positive)
             )
 
 # add function to original particles class to generate virtual particles
@@ -25,11 +26,7 @@ def generate_virt_coords(pts: pygrasph.particles, pp: int, op: int, nlayer: int)
         for j in range(nlayer):
             pts.add_virt_particle(
                 x=((i + 0.5)*pts.dx, -(j + 0.5)*pts.dx),
-                v=(0., 0.),
-                rho=pts.rho_ini,
-                strain=[0.]*4,
-                sigma=[0.]*4,
-                type=-1
+                type=-1 # for virtual particles, type default is -1.
             )
 
     # left layer
@@ -37,10 +34,6 @@ def generate_virt_coords(pts: pygrasph.particles, pp: int, op: int, nlayer: int)
         for j in range(nlayer):
             pts.add_virt_particle(
                 x=(-(j + 0.5)*pts.dx, (i + 0.5)*pts.dx),
-                v=(0., 0.),
-                rho=pts.rho_ini,
-                strain=[0.]*4,
-                sigma=[0.]*4,
                 type=-1
             )
 
