@@ -2,16 +2,18 @@ import numpy as _np
 import typing as _typing
 from . import particles as _particles
 import logging
+from pydantic import Field, validate_call
 
 class base_integrator:
     """
     A base integrator to build on top of.
     """
-    def __init__(self, f: _np.ndarray, kernel: _typing.Callable):
+    def __init__(self, f: _np.ndarray, kernel):
         self. f = f
         self.kernel = kernel
     
-    def __call__(self, pts: _particles, maxtimestep: int, savetimestep: int, printtimestep: int, cfl: float, debug: bool = False) -> None:
+    @validate_call
+    def __call__(self, pts, maxtimestep: int = Field(ge=0), savetimestep: int = Field(ge=0), printtimestep: int = Field(ge=0), cfl: float = Field(gt=0), debug: bool = False) -> None:
         """
         Function to provide basic validation and creat the logger object for derived integrators.
 

@@ -4,14 +4,23 @@ from closefriends import query_pairs as _query_pairs
 import h5py as _h5py
 import math as _math
 from . import material_rates as _material_rates
+from pydantic import Field, validate_call
 
 # particles base class
 class particles:
+
     """
     Class to store the particles' properties and necessary functions for an SPH
     simulation.
     """
-    def __init__(self, maxn: int, dx: float, rho_ini: float, maxinter: int, c: float, **customvals):
+    @validate_call
+    def __init__(self, 
+                 maxn: int = Field(gt=0), # positive non-zero particles (zero particles would be pointless)
+                 dx: float = Field(gt=0), # positive non-zero distance (zero is non-physical)
+                 rho_ini: float = Field(gt=0), # positive non-zero reference density (zero is non-physical)
+                 maxinter: int = Field(ge=0), # positive max no. of particles
+                 c: float = Field(gt=0), # positive non-zero speed of sound (zero is non-physical)
+                 **customvals): # customvals used in stress update
 
         # particle constants
         self.dx = dx               # particle spacing (m)
@@ -223,7 +232,7 @@ class particles:
         def update_virti(pair_i, pair_j):
             if pair_i.shape[0] > 0:
                 r = _np.linalg.norm(x[pair_i, :] - x[pair_j, :], axis=1)
-                w = _np.apply_along_axis(kernel.w, 0, r)
+                w = _np.apply_along_axis(kernel, 0, r)
                 dvol = self.mass/rho[pair_j]
                 _np.add.at(vw, pair_i, w[:]*dvol[:])
                 _np.subtract.at(v[:, 0], pair_i, v[pair_j, 0]*w*dvol[:])
@@ -296,7 +305,7 @@ class particles:
         ## calculate differential position vector and kernel gradient first ----
         dx = x[pair_i, :] - x[pair_j, :]
         dv = v[pair_i, :] - v[pair_j, :]
-        dwdx = kernel.dwdx(dx)
+        dwdx = kernel.grad(dx)
 
         ## update virtual particles' properties --------------------------------
         self.update_virtualparticle_properties(kernel)

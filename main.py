@@ -60,9 +60,9 @@ if __name__ == '__main__':
     k_c = 6.*cohesion*npy.cos(phi)/(npy.sqrt(3.)*(3.-npy.sin(phi)))
     # Calculate elastic-stiffness matrix
     DEcoeff = E/((1.+v)*(1.-2.*v)) 
-    DE = DEcoeff*npy.ascontiguousarray([[1.-v,    v,    v, 0.     ], 
-                                        [   v, 1.-v,    v, 0.     ],
-                                        [   v,    v, 1.-v, 0.     ],
+    DE = DEcoeff*npy.ascontiguousarray([[1.-v,    v,    v,      0.], 
+                                        [   v, 1.-v,    v,      0.],
+                                        [   v,    v, 1.-v,      0.],
                                         [  0.,   0.,   0., 1.-2.*v]])
     
     c = npy.sqrt((Kb+4./3.*Gs)/rho_ini)
@@ -72,7 +72,8 @@ if __name__ == '__main__':
                        dx=0.002, 
                        rho_ini=rho_ini, 
                        maxinter=25*maxn, 
-                       c=c, 
+                       c=c,
+                       # below args are passed to stress_update 
                        E=E, v=v, Kb=Kb, Gs=Gs, DE=DE,
                        alpha_phi=alpha_phi, alpha_psi=alpha_psi, k_c=k_c)
     
