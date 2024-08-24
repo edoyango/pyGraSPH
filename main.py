@@ -2,37 +2,35 @@ import numpy as npy
 import pygrasph
 from pygrasph.stress_update import DP, linear_EOS
 
-# extend particles base class
-class my_particles(pygrasph.particles):
 
-    # add function to original particles class to generate real particles
-    def generate_real_coords(self, mp: int, np: int):
+# add function to original particles class to generate real particles
+def generate_real_coords(pts: pygrasph.particles, mp: int, np: int):
 
-        for i in range(mp):
-            for j in range(np):
-                self.x[self.ntotal, 0] = (i + 0.5)*self.dx
-                self.x[self.ntotal, 1] = (j + 0.5)*self.dx
-                self.type[self.ntotal] = 1
-                self.ntotal += 1
+    for i in range(mp):
+        for j in range(np):
+            pts.x[pts.ntotal, 0] = (i + 0.5)*pts.dx
+            pts.x[pts.ntotal, 1] = (j + 0.5)*pts.dx
+            pts.type[pts.ntotal] = 1
+            pts.ntotal += 1
 
-    # add function to original particles class to generate virtual particles
-    def generate_virt_coords(self, pp: int, op: int, nlayer: int):
+# add function to original particles class to generate virtual particles
+def generate_virt_coords(pts: pygrasph.particles, pp: int, op: int, nlayer: int):
 
-        # bottom layer
-        for i in range(-nlayer, pp+nlayer):
-            for j in range(nlayer):
-                self.x[self.ntotal+self.nvirt, 0] = (i + 0.5)*self.dx
-                self.x[self.ntotal+self.nvirt, 1] =-(j + 0.5)*self.dx
-                self.type[self.ntotal+self.nvirt] = -1
-                self.nvirt += 1
+    # bottom layer
+    for i in range(-nlayer, pp+nlayer):
+        for j in range(nlayer):
+            pts.x[pts.ntotal+pts.nvirt, 0] = (i + 0.5)*pts.dx
+            pts.x[pts.ntotal+pts.nvirt, 1] =-(j + 0.5)*pts.dx
+            pts.type[pts.ntotal+pts.nvirt] = -1
+            pts.nvirt += 1
 
-        # left layer
-        for i in range(op):
-            for j in range(nlayer):
-                self.x[self.ntotal+self.nvirt, 0] =-(j + 0.5)*self.dx
-                self.x[self.ntotal+self.nvirt, 1] = (i + 0.5)*self.dx
-                self.type[self.ntotal+self.nvirt] = -2
-                self.nvirt += 1
+    # left layer
+    for i in range(op):
+        for j in range(nlayer):
+            pts.x[pts.ntotal+pts.nvirt, 0] =-(j + 0.5)*pts.dx
+            pts.x[pts.ntotal+pts.nvirt, 1] = (i + 0.5)*pts.dx
+            pts.type[pts.ntotal+pts.nvirt] = -2
+            pts.nvirt += 1
 
 if __name__ == '__main__':
 
@@ -69,19 +67,19 @@ if __name__ == '__main__':
     c = npy.sqrt((Kb+4./3.*Gs)/rho_ini)
     
     # Initialize particles
-    pts = my_particles(maxn=maxn, 
-                       dx=0.002, 
-                       rho_ini=rho_ini, 
-                       maxinter=25*maxn, 
-                       c=c,
-                       f_stress_update=DP,
-                       # below args are passed to stress_update 
-                       E=E, v=v, Kb=Kb, Gs=Gs, DE=DE,
-                       alpha_phi=alpha_phi, alpha_psi=alpha_psi, k_c=k_c)
+    pts = pygrasph.particles(maxn=maxn, 
+                             dx=0.002, 
+                             rho_ini=rho_ini, 
+                             maxinter=25*maxn, 
+                             c=c,
+                             f_stress_update=DP,
+                             # below args are passed to stress_update 
+                             E=E, v=v, Kb=Kb, Gs=Gs, DE=DE,
+                             alpha_phi=alpha_phi, alpha_psi=alpha_psi, k_c=k_c)
     
     # generate particle data
-    pts.generate_real_coords(mp=mp, np=np)
-    pts.generate_virt_coords(pp=pp, op=op, nlayer=nlayer)
+    generate_real_coords(pts, mp=mp, np=np)
+    generate_virt_coords(pts, pp=pp, op=op, nlayer=nlayer)
 
     # define gravity vector (m/s2)
     g = [0., -9.81]

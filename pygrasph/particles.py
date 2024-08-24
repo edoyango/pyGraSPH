@@ -53,16 +53,6 @@ class particles:
         # custom data in dict
         self.customvals = customvals
 
-    # generate real particles (user to define)
-    def generate_real_coords(self) -> None:
-
-        pass
-
-    # generate virtual particles (user to define)
-    def generate_virt_coords(self) -> None:
-
-        pass
-
     # stress update function (DP model)
     def stress_update(self, dstrain: _np.ndarray, drxy: _np.ndarray, sigma0: _np.ndarray) -> None:
         """
