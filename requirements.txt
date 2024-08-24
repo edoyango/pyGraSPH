@@ -1,3 +1,5 @@
 h5py
 numpy>=1.25
 git+https://github.com/edoyango/closefriends.git
+pydantic
+numpydantic
