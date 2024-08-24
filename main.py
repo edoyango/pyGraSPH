@@ -8,10 +8,14 @@ def generate_real_coords(pts: pygrasph.particles, mp: int, np: int):
 
     for i in range(mp):
         for j in range(np):
-            pts.x[pts.ntotal, 0] = (i + 0.5)*pts.dx
-            pts.x[pts.ntotal, 1] = (j + 0.5)*pts.dx
-            pts.type[pts.ntotal] = 1
-            pts.ntotal += 1
+            pts.add_real_particle(
+                x=((i + 0.5)*pts.dx, (j + 0.5)*pts.dx),
+                v=(0., 0.),
+                rho=pts.rho_ini,
+                strain=[0.]*4,
+                sigma=[0.]*4,
+                type=1
+            )
 
 # add function to original particles class to generate virtual particles
 def generate_virt_coords(pts: pygrasph.particles, pp: int, op: int, nlayer: int):
@@ -19,18 +23,26 @@ def generate_virt_coords(pts: pygrasph.particles, pp: int, op: int, nlayer: int)
     # bottom layer
     for i in range(-nlayer, pp+nlayer):
         for j in range(nlayer):
-            pts.x[pts.ntotal+pts.nvirt, 0] = (i + 0.5)*pts.dx
-            pts.x[pts.ntotal+pts.nvirt, 1] =-(j + 0.5)*pts.dx
-            pts.type[pts.ntotal+pts.nvirt] = -1
-            pts.nvirt += 1
+            pts.add_virt_particle(
+                x=((i + 0.5)*pts.dx, -(j + 0.5)*pts.dx),
+                v=(0., 0.),
+                rho=pts.rho_ini,
+                strain=[0.]*4,
+                sigma=[0.]*4,
+                type=-1
+            )
 
     # left layer
     for i in range(op):
         for j in range(nlayer):
-            pts.x[pts.ntotal+pts.nvirt, 0] =-(j + 0.5)*pts.dx
-            pts.x[pts.ntotal+pts.nvirt, 1] = (i + 0.5)*pts.dx
-            pts.type[pts.ntotal+pts.nvirt] = -2
-            pts.nvirt += 1
+            pts.add_virt_particle(
+                x=(-(j + 0.5)*pts.dx, (i + 0.5)*pts.dx),
+                v=(0., 0.),
+                rho=pts.rho_ini,
+                strain=[0.]*4,
+                sigma=[0.]*4,
+                type=-1
+            )
 
 if __name__ == '__main__':
 

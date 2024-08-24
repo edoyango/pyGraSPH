@@ -6,6 +6,7 @@ import math as _math
 from . import material_rates as _material_rates
 from pydantic import Field, validate_call
 from . import stress_update
+from numpydantic import NDArray, Shape
 
 # particles base class
 class particles:
@@ -52,6 +53,54 @@ class particles:
 
         # custom data in dict
         self.customvals = customvals
+    
+    @validate_call
+    def add_real_particle(self, 
+                          x: NDArray[Shape["2 d"], _np.float64], 
+                          v: NDArray[Shape["2 d"], _np.float64],
+                          rho: float,
+                          strain: NDArray[Shape["4 d"], _np.float64],
+                          sigma: NDArray[Shape["4 d"], _np.float64],
+                          type: int = Field(gt=0),
+                          ) -> None:
+        """
+        Helper function used to insert a particle
+        """
+        if self.nvirt > 0:
+            raise RuntimeError("It looks like a real particle is being added after virtual particles! Make sure to use add_real_particle before add_virt_particle.")
+        elif self.ntotal >= self.maxn:
+            raise RuntimeError("The maximum number of particles has been exceeded! Modify the maxn parameter and try again.")
+
+        self.x[self.ntotal, :] = x[:]
+        self.v[self.ntotal, :] = v[:]
+        self.rho[self.ntotal] = rho
+        self.strain[self.ntotal, :] = strain[:]
+        self.sigma[self.ntotal, :] = sigma[:]
+        self.type[self.ntotal] = type
+
+        self.ntotal += 1
+    
+    @validate_call
+    def add_virt_particle(self, 
+                          x: NDArray[Shape["2 d"], _np.float64], 
+                          v: NDArray[Shape["2 d"], _np.float64],
+                          rho: float,
+                          strain: NDArray[Shape["4 d"], _np.float64],
+                          sigma: NDArray[Shape["4 d"], _np.float64],
+                          type: int = Field(lt=0),
+                          ) -> None:
+        
+        if self.ntotal+self.nvirt >= self.maxn:
+            raise RuntimeError("The maximum number of particles has been exceeded! Modify the maxn parameter and try again.")
+    
+        self.x[self.ntotal+self.nvirt, :] = x[:]
+        self.v[self.ntotal+self.nvirt, :] = v[:]
+        self.rho[self.ntotal+self.nvirt] = rho
+        self.strain[self.ntotal+self.nvirt, :] = strain[:]
+        self.sigma[self.ntotal+self.nvirt, :] = sigma[:]
+        self.type[self.ntotal+self.nvirt] = type
+
+        self.nvirt += 1
 
     # stress update function (DP model)
     def stress_update(self, dstrain: _np.ndarray, drxy: _np.ndarray, sigma0: _np.ndarray) -> None:
