@@ -4,14 +4,26 @@ from closefriends import query_pairs as _query_pairs
 import h5py as _h5py
 import math as _math
 from . import material_rates as _material_rates
+from pydantic import Field, validate_call
+from . import stress_update
+from numpydantic import NDArray, Shape
 
 # particles base class
 class particles:
+
     """
     Class to store the particles' properties and necessary functions for an SPH
     simulation.
     """
-    def __init__(self, maxn: int, dx: float, rho_ini: float, maxinter: int, c: float, **customvals):
+    @validate_call
+    def __init__(self, 
+                 maxn: int = Field(gt=0), # positive non-zero particles (zero particles would be pointless)
+                 dx: float = Field(gt=0), # positive non-zero distance (zero is non-physical)
+                 rho_ini: float = Field(gt=0), # positive non-zero reference density (zero is non-physical)
+                 maxinter: int = Field(ge=0), # positive max no. of particles
+                 c: float = Field(gt=0), # positive non-zero speed of sound (zero is non-physical)
+                 f_stress_update: _typing.Callable = stress_update.DP,
+                 **customvals): # customvals used in stress update
 
         # particle constants
         self.dx = dx               # particle spacing (m)
@@ -37,25 +49,63 @@ class particles:
 
         self.pairs = _np.ndarray((maxinter, 2))
 
+        self._stress_update = f_stress_update
+
         # custom data in dict
         self.customvals = customvals
+    
+    @validate_call
+    def add_real_particle(self, 
+                          x: NDArray[Shape["2 d"], _np.float64], 
+                          v: NDArray[Shape["2 d"], _np.float64] = None,
+                          rho: float = None,
+                          strain: NDArray[Shape["4 d"], _np.float64] = None,
+                          sigma: NDArray[Shape["4 d"], _np.float64] = None,
+                          type: int = Field(gt=0, default=1),
+                          ) -> None:
+        """
+        Helper function used to insert a particle
+        """
+        if self.nvirt > 0:
+            raise RuntimeError("It looks like a real particle is being added after virtual particles! Make sure to use add_real_particle before add_virt_particle.")
+        elif self.ntotal >= self.maxn:
+            raise RuntimeError("The maximum number of particles has been exceeded! Modify the maxn parameter and try again.")
 
-    # generate real particles (user to define)
-    def generate_real_coords(self) -> None:
+        self.x[self.ntotal, :] = x[:]
+        if v is not None: self.v[self.ntotal, :] = v[:]
+        if rho is not None: self.rho[self.ntotal] = rho
+        if strain is not None: self.strain[self.ntotal, :] = strain[:]
+        if sigma is not None: self.sigma[self.ntotal, :] = sigma[:]
+        self.type[self.ntotal] = type
 
-        pass
+        self.ntotal += 1
+    
+    @validate_call
+    def add_virt_particle(self, 
+                          x: NDArray[Shape["2 d"], _np.float64], 
+                          v: NDArray[Shape["2 d"], _np.float64] = None,
+                          rho: float = None,
+                          strain: NDArray[Shape["4 d"], _np.float64] = None,
+                          sigma: NDArray[Shape["4 d"], _np.float64] = None,
+                          type: int = Field(lt=0, default=-1),
+                          ) -> None:
+        
+        if self.ntotal+self.nvirt >= self.maxn:
+            raise RuntimeError("The maximum number of particles has been exceeded! Modify the maxn parameter and try again.")
+    
+        self.x[self.ntotal+self.nvirt, :] = x[:]
+        if v is not None: self.v[self.ntotal+self.nvirt, :] = v[:]
+        if rho is not None: self.rho[self.ntotal+self.nvirt] = rho
+        if strain is not None: self.strain[self.ntotal+self.nvirt, :] = strain[:]
+        if sigma is not None: self.sigma[self.ntotal+self.nvirt, :] = sigma[:]
+        self.type[self.ntotal+self.nvirt] = type
 
-    # generate virtual particles (user to define)
-    def generate_virt_coords(self) -> None:
-
-        pass
+        self.nvirt += 1
 
     # stress update function (DP model)
     def stress_update(self, dstrain: _np.ndarray, drxy: _np.ndarray, sigma0: _np.ndarray) -> None:
         """
-        Updates the particles' stress (sigma) using a semi-implicit 
-        elasto-plastic stress update procedure with Drucker-Prager yield
-        surface.
+        Updates the particles' stress (sigma) using the _stress_update function.
         dstrain: a 2D ndarray storing the strain increment to be applied for
                  each particle. Rows represent particles, and columns represent
                  their incremental strain tensor (voigt notation).
@@ -65,100 +115,7 @@ class particles:
                 Rows represent particles, and columns represent their initial
                 stress tensor (voigt notation).
         """
-
-        # cache some references
-        DE = self.customvals['DE'][:, :]
-        k_c = self.customvals['k_c']
-        alpha_phi = self.customvals['alpha_phi']
-        alpha_psi = self.customvals['alpha_psi']
-        sigma = self.sigma # this stores reference, not the data.
-        ntotal = self.ntotal
-        nvirt = self.nvirt
-        realmask = self.type[0:ntotal+nvirt] > 0
-
-        npmatmul = _np.matmul
-        npsqrt = _np.sqrt
-
-        # elastic predictor stress increment
-        dsig = npmatmul(dstrain[0:ntotal+nvirt, :], DE[:, :])
-        # update stress increment with Jaumann stress-rate
-        dsig[:, 3] += sigma0[0:ntotal+nvirt, 0]*drxy[0:ntotal+nvirt] - sigma0[0:ntotal+nvirt, 1]*drxy[0:ntotal+nvirt]
-
-        # update stress state
-        _np.add(sigma0[0:ntotal+nvirt, :], dsig[:, :], out=sigma[0:ntotal+nvirt, :], where=realmask[:, _np.newaxis])
-
-        # define identity and D2 matrisices (Voigt notation)
-        Ide = _np.ascontiguousarray([1, 1, 1, 0])
-        D2 = _np.ascontiguousarray([1, 1, 1, 2])
-
-        # stress invariants
-        I1 = _np.sum(sigma[0:ntotal+nvirt, 0:3], axis=1)
-        s = sigma[0:ntotal+nvirt, :] - _np.outer(I1[:], Ide[:]/3.)
-        J2 = 0.5*_np.einsum("ij,ij->i", s, s*D2)
-
-        # tensile cracking check 1: 
-        # J2 is zero but I1 is beyond apex of yield surface
-        tensile_crack_check1_mask = _np.logical_and(J2==0., I1 > k_c)
-
-        I1 = _np.where(tensile_crack_check1_mask, k_c, I1)
-        sigma[0:ntotal+nvirt, 0:3] = _np.where(
-            tensile_crack_check1_mask[:, _np.newaxis],
-            k_c/3., 
-            sigma[0:ntotal+nvirt, 0:3]
-        )
-        sigma[0:ntotal+nvirt, 3] = _np.where(tensile_crack_check1_mask, 0., sigma[0:ntotal+nvirt, 3])
-
-        # calculate yield function
-        f = alpha_phi*I1 + npsqrt(J2) - k_c
-
-        ## Start performing corrector step.
-        # Calculate mask where stress state is outside yield surface
-        f_mask = f > 0.
-        
-        # normalize deviatoric stress tensor by its frobenius norm/2 (only for pts with f > 0)
-        shat = s.copy()
-        _np.divide(
-            shat,
-            2.*npsqrt(J2)[:, _np.newaxis], 
-            out=shat,
-            where=f_mask[:, _np.newaxis],
-        )
-
-        # update yield potential and plastic potential matrices with normalized deviatoric stress tensor
-        dfdsig = _np.add(alpha_phi*Ide[_np.newaxis, :], shat, where=f_mask[:, _np.newaxis])
-        dgdsig = _np.add(alpha_psi*Ide[_np.newaxis, :], shat, where=f_mask[:, _np.newaxis])
-
-        # calculate plastic multipler
-        dlambda = _np.divide(
-            f,
-            _np.einsum("ij,ij->i", dfdsig, (D2[:]*npmatmul(dgdsig[:, :], DE[:, :]))),
-            where=f_mask
-        )
-
-        # Apply plastic corrector stress
-        _np.subtract(
-            sigma[0:ntotal+nvirt, :], 
-            npmatmul(dlambda[:, _np.newaxis]*dgdsig[:, :], DE[:, :]), 
-            out=sigma[0:ntotal+nvirt, :],
-            where=f_mask[:, _np.newaxis]
-        )
-
-        ## tensile cracking check 2:
-        # corrected stress state is outside yield surface
-        I1 = _np.sum(sigma[0:ntotal+nvirt, 0:3], axis=1)
-        tensile_crack_check2_mask = I1 > k_c/alpha_phi
-        sigma[0:ntotal+nvirt, 0:3] = _np.where(
-            tensile_crack_check2_mask[:, _np.newaxis],
-            k_c/alpha_phi/3, 
-            sigma[0:ntotal+nvirt, 0:3]
-        )
-        sigma[0:ntotal+nvirt, 3] = _np.where(tensile_crack_check2_mask, 0., sigma[0:ntotal+nvirt, 3])
-
-        # simple fluid equation of state.
-        # for i in range(self.ntotal+self.nvirt):
-        #     p = self.c*self.c*(self.rho[i] - self.rho_ini)
-        #     self.sigma[i, 0:3] = -p/3.
-        #     self.sigma[i, 3] = 0.
+        self._stress_update(self, dstrain, drxy, sigma0)
 
     # function to update self.pairs - list of particle pairs
     def findpairs(self, kh: float) -> None:
@@ -223,7 +180,7 @@ class particles:
         def update_virti(pair_i, pair_j):
             if pair_i.shape[0] > 0:
                 r = _np.linalg.norm(x[pair_i, :] - x[pair_j, :], axis=1)
-                w = _np.apply_along_axis(kernel.w, 0, r)
+                w = _np.apply_along_axis(kernel, 0, r)
                 dvol = self.mass/rho[pair_j]
                 _np.add.at(vw, pair_i, w[:]*dvol[:])
                 _np.subtract.at(v[:, 0], pair_i, v[pair_j, 0]*w*dvol[:])
@@ -296,7 +253,7 @@ class particles:
         ## calculate differential position vector and kernel gradient first ----
         dx = x[pair_i, :] - x[pair_j, :]
         dv = v[pair_i, :] - v[pair_j, :]
-        dwdx = kernel.dwdx(dx)
+        dwdx = kernel.grad(dx)
 
         ## update virtual particles' properties --------------------------------
         self.update_virtualparticle_properties(kernel)
