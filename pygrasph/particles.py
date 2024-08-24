@@ -5,6 +5,7 @@ import h5py as _h5py
 import math as _math
 from . import material_rates as _material_rates
 from pydantic import Field, validate_call
+from . import stress_update
 
 # particles base class
 class particles:
@@ -20,6 +21,7 @@ class particles:
                  rho_ini: float = Field(gt=0), # positive non-zero reference density (zero is non-physical)
                  maxinter: int = Field(ge=0), # positive max no. of particles
                  c: float = Field(gt=0), # positive non-zero speed of sound (zero is non-physical)
+                 f_stress_update: _typing.Callable = stress_update.DP,
                  **customvals): # customvals used in stress update
 
         # particle constants
@@ -45,6 +47,8 @@ class particles:
         self.sigma0 = _np.zeros((maxn, 4), dtype=_np.float64)
 
         self.pairs = _np.ndarray((maxinter, 2))
+
+        self._stress_update = f_stress_update
 
         # custom data in dict
         self.customvals = customvals
@@ -74,100 +78,7 @@ class particles:
                 Rows represent particles, and columns represent their initial
                 stress tensor (voigt notation).
         """
-
-        # cache some references
-        DE = self.customvals['DE'][:, :]
-        k_c = self.customvals['k_c']
-        alpha_phi = self.customvals['alpha_phi']
-        alpha_psi = self.customvals['alpha_psi']
-        sigma = self.sigma # this stores reference, not the data.
-        ntotal = self.ntotal
-        nvirt = self.nvirt
-        realmask = self.type[0:ntotal+nvirt] > 0
-
-        npmatmul = _np.matmul
-        npsqrt = _np.sqrt
-
-        # elastic predictor stress increment
-        dsig = npmatmul(dstrain[0:ntotal+nvirt, :], DE[:, :])
-        # update stress increment with Jaumann stress-rate
-        dsig[:, 3] += sigma0[0:ntotal+nvirt, 0]*drxy[0:ntotal+nvirt] - sigma0[0:ntotal+nvirt, 1]*drxy[0:ntotal+nvirt]
-
-        # update stress state
-        _np.add(sigma0[0:ntotal+nvirt, :], dsig[:, :], out=sigma[0:ntotal+nvirt, :], where=realmask[:, _np.newaxis])
-
-        # define identity and D2 matrisices (Voigt notation)
-        Ide = _np.ascontiguousarray([1, 1, 1, 0])
-        D2 = _np.ascontiguousarray([1, 1, 1, 2])
-
-        # stress invariants
-        I1 = _np.sum(sigma[0:ntotal+nvirt, 0:3], axis=1)
-        s = sigma[0:ntotal+nvirt, :] - _np.outer(I1[:], Ide[:]/3.)
-        J2 = 0.5*_np.einsum("ij,ij->i", s, s*D2)
-
-        # tensile cracking check 1: 
-        # J2 is zero but I1 is beyond apex of yield surface
-        tensile_crack_check1_mask = _np.logical_and(J2==0., I1 > k_c)
-
-        I1 = _np.where(tensile_crack_check1_mask, k_c, I1)
-        sigma[0:ntotal+nvirt, 0:3] = _np.where(
-            tensile_crack_check1_mask[:, _np.newaxis],
-            k_c/3., 
-            sigma[0:ntotal+nvirt, 0:3]
-        )
-        sigma[0:ntotal+nvirt, 3] = _np.where(tensile_crack_check1_mask, 0., sigma[0:ntotal+nvirt, 3])
-
-        # calculate yield function
-        f = alpha_phi*I1 + npsqrt(J2) - k_c
-
-        ## Start performing corrector step.
-        # Calculate mask where stress state is outside yield surface
-        f_mask = f > 0.
-        
-        # normalize deviatoric stress tensor by its frobenius norm/2 (only for pts with f > 0)
-        shat = s.copy()
-        _np.divide(
-            shat,
-            2.*npsqrt(J2)[:, _np.newaxis], 
-            out=shat,
-            where=f_mask[:, _np.newaxis],
-        )
-
-        # update yield potential and plastic potential matrices with normalized deviatoric stress tensor
-        dfdsig = _np.add(alpha_phi*Ide[_np.newaxis, :], shat, where=f_mask[:, _np.newaxis])
-        dgdsig = _np.add(alpha_psi*Ide[_np.newaxis, :], shat, where=f_mask[:, _np.newaxis])
-
-        # calculate plastic multipler
-        dlambda = _np.divide(
-            f,
-            _np.einsum("ij,ij->i", dfdsig, (D2[:]*npmatmul(dgdsig[:, :], DE[:, :]))),
-            where=f_mask
-        )
-
-        # Apply plastic corrector stress
-        _np.subtract(
-            sigma[0:ntotal+nvirt, :], 
-            npmatmul(dlambda[:, _np.newaxis]*dgdsig[:, :], DE[:, :]), 
-            out=sigma[0:ntotal+nvirt, :],
-            where=f_mask[:, _np.newaxis]
-        )
-
-        ## tensile cracking check 2:
-        # corrected stress state is outside yield surface
-        I1 = _np.sum(sigma[0:ntotal+nvirt, 0:3], axis=1)
-        tensile_crack_check2_mask = I1 > k_c/alpha_phi
-        sigma[0:ntotal+nvirt, 0:3] = _np.where(
-            tensile_crack_check2_mask[:, _np.newaxis],
-            k_c/alpha_phi/3, 
-            sigma[0:ntotal+nvirt, 0:3]
-        )
-        sigma[0:ntotal+nvirt, 3] = _np.where(tensile_crack_check2_mask, 0., sigma[0:ntotal+nvirt, 3])
-
-        # simple fluid equation of state.
-        # for i in range(self.ntotal+self.nvirt):
-        #     p = self.c*self.c*(self.rho[i] - self.rho_ini)
-        #     self.sigma[i, 0:3] = -p/3.
-        #     self.sigma[i, 3] = 0.
+        self._stress_update(self, dstrain, drxy, sigma0)
 
     # function to update self.pairs - list of particle pairs
     def findpairs(self, kh: float) -> None:
